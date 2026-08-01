@@ -1,0 +1,104 @@
+{
+  "changelog": [
+    {
+      "version": "0.19.0",
+      "date": "2026-07-31",
+      "notes": "Caméras GÉNÉRIQUES (pilote 'generic') : pour les caméras d'une presta qui ne sont pas des Panasonic AW, une simple fiche (nom, adresse, numéro) sans aucune commande, juste pour la vue globale — joignabilité par test TCP, aucun onglet de contrôle. Le type réel sera implémenté plus tard. Ajout d'une capacité CAP_NETWORK : le bouton « Changer l'IP » ne s'affiche que pour les caméras qui le supportent (les AW)."
+    },
+    {
+      "version": "0.18.0",
+      "date": "2026-07-31",
+      "notes": "Identité réseau des caméras. « Retrouver par série » (barre du Parc) : balaie les /24 du parc, interroge chaque répondeur par getinfo, et met à jour l'adresse de toute caméra dont le NUMÉRO DE SÉRIE est retrouvé ailleurs — le parc s'identifie par série, l'IP n'est qu'un emplacement. « Changer l'IP » (détail caméra, pilote panasonic_aw : get_network / POST cgi-bin/network en lecture-modif-réécriture, en-tête Referer) : écrit la nouvelle adresse et re-localise la caméra. Garde-fou de conflit d'adresse : si l'IP visée est déjà prise par une caméra DE LA PRESTA (numérotée) → refus (changer d'abord son IP) ; si prise au parc mais HORS presta → alerte mais autorisé."
+    },
+    {
+      "version": "0.17.0",
+      "date": "2026-07-30",
+      "notes": "Shotbox : bouton PLEIN ÉCRAN (mode « scène » sans menus, force le mode Utilisation, vrai plein écran navigateur + repli overlay ; Échap ou ✕ pour sortir) ; boutons redessinés en PADS carrés façon Akai MPC (carrés, coins arrondis, effet d'enfoncement au clic, flash lumineux au déclenchement)."
+    },
+    {
+      "version": "0.16.0",
+      "date": "2026-07-30",
+      "notes": "Nouvel onglet SHOTBOX : grille de boutons paramétrables (dimensions configurables lignes×colonnes), chaque bouton = rappel de mémoire d'une caméra (par numéro) ou lancement d'une macro (pupitre choisi) ; deux modes Édition / Utilisation ; plusieurs shotbox nommées, enregistrées dans le volume et incluses à l'export/import. Le déclenchement réutilise les routes existantes (recall_preset / macro_control). Onglet « Sélection presta » déplacé juste après le Parc."
+    },
+    {
+      "version": "0.15.0",
+      "date": "2026-07-30",
+      "notes": "Sauvegardes : choix de la PORTÉE de l'instantané — caméras de la presta (numérotées, par défaut) ou tout le parc. Macros : la caméra d'une étape se choisit dans une LISTE DÉROULANTE des caméras numérotées (triées par numéro) au lieu d'un numéro tapé."
+    },
+    {
+      "version": "0.14.0",
+      "date": "2026-07-30",
+      "notes": "Parc FIXE + « prestas ». Une caméra est UTILISÉE si elle a un numéro ; sans numéro elle est masquée des vues d'exploitation (Vue d'ensemble, Noms, affectation, Grille), mais reste dans le Parc et dans Ember+ (où on peut la numéroter). Nouvel onglet « Sélection presta » : numéroter les caméras du parc, PROFILS nommés (jeux caméra→numéro, indexés par hôte) qu'on enregistre/charge/supprime, et EXPORT / IMPORT du parc (+ profils) en JSON — l'export exclut les mots de passe, l'import fait un upsert par hôte (préserve mot de passe et id existants). Macros : intervalle des étapes saisi en SECONDES (converti en ms sur le fil)."
+    },
+    {
+      "version": "0.13.0",
+      "date": "2026-07-30",
+      "notes": "Onglet GRILLE recentré sur l'affectation aux pupitres : l'édition du numéro de caméra en est RETIRÉE (elle se fait au formulaire caméra et par la matrice Ember+) ; le numéro reste affiché, en lecture, et sert à trier les lignes (caméras classées par numéro). Table d'affectation web : bouton « ✓ Valider » près du champ IP (ou touche Entrée) qui fige la saisie — une IP connue relie la caméra, une IP inconnue propose de l'AJOUTER au parc (puis la sélectionne), sinon reste en « Saisie manuelle » (la colonne de gauche n'affiche plus « Non affecté » à tort)."
+    },
+    {
+      "version": "0.12.0",
+      "date": "2026-07-30",
+      "notes": "Fiabilité RP200 (des « réponse 500 » intermittents étaient rapportés). Le transport du pilote pupitre RÉESSAIE désormais les erreurs transitoires (5xx du serveur embarqué, connexion coupée) — les écritures réécrivant la table entière sont idempotentes, donc le réessai est sans risque ; le sondage de joignabilité, lui, reste à un seul essai pour ne pas s'allonger. Toute exception inattendue vers le pupitre est convertie en PanelError → l'outil renvoie une 502 « injoignable » propre au lieu d'une 500 non gérée. Enfin, les 500 côté serveur journalisent maintenant leur trace complète (elles étaient muettes) pour diagnostiquer les cas résiduels."
+    },
+    {
+      "version": "0.11.0",
+      "date": "2026-07-30",
+      "notes": "Table d'affectation web (onglet Pupitres) simplifiée : colonne « adresse IP » TOUJOURS visible et éditable, auto-remplie quand on choisit une caméra dans la liste (fini le mode « Adresse manuelle… ») ; taper une IP connue du parc re-sélectionne la caméra, une IP hors parc reste en manuel. Bouton ✕ par ligne pour retirer une affectation, et bouton « Tout supprimer » (avec confirmation) pour vider le pupitre."
+    },
+    {
+      "version": "0.10.0",
+      "date": "2026-07-30",
+      "notes": "Grille Ember+ finalisée en UNE seule matrice, avec indirection par NUMÉROS. Sources : 1=Disconnect, 2..=caméras renseignées (pour numéroter), puis les numéros 1..grid_cameras à partir d'un offset arrondi à la dizaine supérieure (101/151/201…) pour servir de sources aux boutons. Cibles : 1..grid_cameras=numéros, puis grid_buttons cibles par pupitre. Croisements valides : caméra×numéro (numérote), numéro×bouton (affecte) ; Disconnect efface. Les boutons portent un NUMÉRO (stocké dans panel_fleet, bouton→numéro), pas une caméra : le tool résout numéro→caméra→IP, et PROPAGE automatiquement — renuméroter une caméra ré-écrit tous les boutons portant ce numéro. Validé sur RP200 + caméras réelles (structure, offset, numérotation par croisement, refus des croisements invalides, Disconnect)."
+    },
+    {
+      "version": "0.9.0",
+      "date": "2026-07-30",
+      "notes": "Ember+ : la grille (numérotation + affectation aux boutons de pupitre) devient une MATRICE à points de croisement, pilotable depuis VSM. Sources = caméras ; cibles (colonnes) numérotées 1..grid_cameras = NUMÉROS de caméra, puis grid_buttons cibles par pupitre (pupitre 1 → grid_cameras+1.., etc.). Croiser une caméra sur la cible n≤grid_cameras lui attribue le numéro n (sémantique oneToN : déplace l'ancien porteur) ; sur une cible « bouton » l'affecte à ce bouton du pupitre (set_cam_assign_edit). Écritures via ember/connect. Les nœuds de pilotage caméra (marche/format/mémoire) restent en plus (groupe « Caméras » ; le numéro y redevient une info en lecture, la numérotation se faisant par la matrice). Affectations des pupitres mises en cache par le rafraîchisseur de fond (arbre sans I/O). Validé sur RP200 + 2 caméras réelles."
+    },
+    {
+      "version": "0.8.0",
+      "date": "2026-07-30",
+      "notes": "Dimensions de la GRILLE réglables (Réglages de l'outil) : nombre de caméras exposées (lignes + numéro maximum), nombre de pupitres exposés (blocs de colonnes), nombre de boutons par pupitre (colonnes par bloc). Permet de faire évoluer l'échelle sans toucher au code. Réglages grid_cameras/grid_panels/grid_buttons (défauts 100/10/10) injectés au conteneur en variables d'env ; nouvel endpoint GET /config lu par la grille au chargement."
+    },
+    {
+      "version": "0.7.0",
+      "date": "2026-07-30",
+      "notes": "Nouvel onglet GRILLE : un seul écran pour (1) NUMÉROTER les caméras — colonne N° éditable, ex. HE130 → « Caméra 3 » (réordonne l'affichage) — et (2) les AFFECTER aux boutons des pupitres — lignes = caméras, un bloc de 10 colonnes (boutons/positions) par pupitre, jusqu'à 10 pupitres ; une case = « cette caméra sur ce bouton de ce pupitre ». Deux axes SÉPARÉS et indépendants (le numéro de caméra est fixe ; une caméra peut occuper un bouton différent selon le pupitre). Une position ne tient qu'une caméra, une caméra n'occupe qu'un bouton par pupitre. Rien n'est écrit avant « Enregistrer » (numéros via /cameras, affectations via /panels/<id>/assignments ; positions au-delà de 10 préservées ; doublons de numéro refusés). Vue purement front réutilisant les routes existantes, aucun nouveau backend."
+    },
+    {
+      "version": "0.6.0",
+      "date": "2026-07-30",
+      "notes": "Contribution au SERVICE Ember+ global (déclare ember:true). Chaque caméra devient un nœud au pupitre VSM : libellé = nom, avec Numéro, Joignabilité et Modèle en lecture, et en ÉCRITURE marche/veille, format vidéo (liste de la fréquence courante) et rappel de mémoire (sous-nœud Mémoires). Contrainte du service respectée : ember/tree se construit SANS I/O caméra (mesuré ~4 ms) — un rafraîchisseur de fond lent (EMBER_POLL, 30 s par défaut) relève marche/veille + format des caméras JOIGNABLES et les met en cache ; les écritures partent en direct et rafraîchissent la caméra touchée. Validé sur deux caméras réelles (AW-HE130, AW-UE160)."
+    },
+    {
+      "version": "0.5.0",
+      "date": "2026-07-30",
+      "notes": "ÉDITEUR DE MACROS RP200. Nouvelle sous-vue « Macros » dans l'onglet Pupitres (bascule Affectations / Macros). Lecture, édition et écriture des 100 macros du pupitre (jusqu'à 500 étapes) : rappel de mémoire (cam + n°), appel de macro, attente utilisateur, commande AW brute, CGI GET/POST ; ajout/suppression/réordonnancement d'étapes ; Jouer / Arrêter (avec confirmation, pilote les caméras réelles). Protocole rétro-ingénieré et VALIDÉ sur RP200 réel : get_macro_step / macro_save / macro_control, en-tête Referer (port omis) comme pour les affectations, décodage sémantique de #R<nn> (mémoire), RECALL_MACRO:NNN, WAIT_USER_TRIGGER, avec repli « commande brute » pour tout code inconnu (aller-retour sans perte). Règle du firmware appliquée : une macro ne peut pas se terminer par une attente utilisateur (message clair au lieu d'un 400). Le n° de caméra d'une étape est recoupé avec le parc via la table d'affectation."
+    },
+    {
+      "version": "0.4.0",
+      "date": "2026-07-30",
+      "notes": "Caméras : champ « Numéro de caméra » (identifiant d'exploitation, optionnel, unique, INDÉPENDANT du slot pupitre) ; tri du parc par numéro ou par adresse IP ; puce numéro sur les cartes. Table d'affectation pupitre : TROIS modes par slot — caméra du parc (liste étiquetée par numéro), adresse IP manuelle, et bouton « Pré-remplir par numéro » (slot C_n ← caméra n° n) comme commodité (sans imposer numéro==slot). Bouton « Page web ↗ » ouvrant l'interface web d'une caméra ou d'un pupitre dans un nouvel onglet."
+    },
+    {
+      "version": "0.3.1",
+      "date": "2026-07-30",
+      "notes": "Correctif ÉCRITURE des affectations de pupitre (le testeur voyait « 400 Bad Request » à chaque changement). Le CGI `set_cam_assign_edit` du RP200 exige un en-tête `Referer` vers une page `/admin/…`, avec MATCH STRICT : le port par défaut doit être OMIS (`http://host/…`, pas `http://host:80/…`). Sans Referer ou avec `:80` → 400 ; avec Referer sans port → 204. Écriture désormais VALIDÉE sur RP200 réel par un aller-retour réversible sur un slot libre (assignation + préservation des autres slots + restauration exacte vérifiées). Réserve « à valider en direct » levée."
+    },
+    {
+      "version": "0.3.0",
+      "date": "2026-07-30",
+      "notes": "Volet PUPITRE. Nouveau sous-système à pilotes `panels/` (jumeau de `drivers/` mais pour les télécommandes : on gère une TABLE D'AFFECTATION, pas des mémoires). Pilote `panasonic_rp` (gamme AW-RP200/150/120/60/50) rétro-ingénieré EN DIRECT sur un RP200 réel via le JavaScript qu'il sert : auth Digest MD5, `GET /cgi-bin/get_cam_assign_edit` (200 slots × control_type/ip/port/user/pass) et `POST /cgi-bin/set_cam_assign_edit` (table entière). LECTURE confirmée sur le matériel ; écriture mappée, marquée à valider en direct. Parc de pupitres (panel_fleet.py) avec surveillance de disponibilité, routes `/panels…`. Cinquième vue « Pupitres » : liste des pupitres + table d'affectation éditable slot par slot, recoupée avec le parc caméras (on choisit une caméra du parc, pas une IP). Le mot de passe caméra ne transite jamais par le navigateur : le front envoie un `camera_id`, le serveur résout IP/port/user/mot de passe depuis le parc. Écriture confirmée explicitement (config d'exploitation), n'envoie que les slots changés, le pilote préserve le reste."
+    },
+    {
+      "version": "0.2.0",
+      "date": "2026-07-29",
+      "notes": "Sauvegardes : instantanés d'une sélection de caméras (tout le parc par défaut), comparaison paramètre par paramètre avec l'état courant, restauration SÉLECTIVE. La comparaison porte sur tout ce qui est lisible, la restauration sur le sous-ensemble inscriptible seulement — distinction affichée ligne par ligne. Ordre d'écriture imposé par le pilote (champ `order` : fréquence avant format) et signalement des écritures qui font redémarrer la caméra (`heavy`). Notion de SORTIE VIDÉO (champ `output`) : les formats s'affichent en tableau, une ligne par sortie, en prévision des modèles multi-sorties (AW-UE160) ; une HE130 produit un tableau à une ligne. Une caméra injoignable au relevé est conservée et marquée en erreur au lieu d'être enregistrée vide. Vue d'ensemble du parc (tableau caméras × sorties). Ajout en série (première IP + nombre + identifiants communs), avec aperçu de la plage, refus du débordement au-delà de .254 et des doublons d'adresse. Formats PAR SORTIE désormais INSCRIPTIBLES sur AW-UE160 : table générée dans drivers/panasonic_outputs.py depuis le code de la caméra, résolue selon fréquence + format système + cadence FPS (QSL:DD) + recadrage UHD (QSJ:2E). Listes de formats système exactes sur les deux familles (plus d'inférence). Interface réorganisée en QUATRE VUES pleine page (Parc, Vue d'ensemble, Noms des mémoires, Sauvegardes) au lieu de panneaux empilés ; chargement paresseux et invalidation sur modification du parc. Nommage des mémoires DANS la caméra sur AW-UE160 (QSJ:35/OSJ:35, effacement OSJ:36) avec repli local pour les modèles qui ne savent pas ; contraintes mesurées : 15 caractères, ni espace ni tiret, accents translittérés. Matrice de renommage mémoires × caméras. Sondage unique de joignabilité avant toute lecture en masse (matrice : 40 s → 0,3 s)."
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-07-29",
+      "notes": "Squelette. Architecture multi-marques à pilotes (drivers/base.py) : parc, surveillance de disponibilité en tâche de fond, paramètres typés pilotés par schéma, mémoires avec nommage local, actions groupées avec compte-rendu par caméra, console de mise au point. Pilote Panasonic AW : commandes confirmées sur AW-HE130 réelle (format vidéo OSA:87 / QSA:87, fréquence OSE:77 / QSE:77, marche-veille, autofocus, vitesse de rappel, gain, ND, obturateur). Pilote Sony VISCA over IP écrit mais NON validé. Volet pupitre non commencé."
+    }
+  ]
+}

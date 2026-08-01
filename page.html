@@ -1,0 +1,339 @@
+<!-- Caméras tourelles — fragment monté par window.BTTools.ptz.mount(el, ctx).
+     Front pur : toute la logique tourne dans le conteneur, atteinte via ctx.api(...).
+
+     Quatre VUES pleine page, exclusives, sous une barre d'onglets : Parc · Vue d'ensemble ·
+     Noms des mémoires · Sauvegardes. Chacune occupe la page à son tour plutôt que de
+     s'empiler sous la précédente — un tableau large n'est lisible que s'il a la place.
+
+     L'UI ne connaît aucune marque : elle se construit à partir des capacités et du schéma
+     de paramètres renvoyés par le pilote. -->
+<div class="ptz-app">
+
+  <div class="ptz-bar">
+    <strong class="ptz-title" data-i18n="plugin.ptz.title">Caméras tourelles</strong>
+    <span class="ptz-poll" id="ptz-poll"></span>
+    <span class="ptz-spacer"></span>
+    <button class="btn" id="ptz-refresh" type="button" title="Actualiser">↻</button>
+    <button class="btn" id="ptz-discover" type="button" data-i18n="plugin.ptz.discover" title="Balayer le réseau et retrouver les caméras par numéro de série">Retrouver par série</button>
+    <button class="btn" id="ptz-probe-all" type="button" data-i18n="plugin.ptz.pollNow">Sonder maintenant</button>
+    <button class="btn" id="ptz-add-batch" type="button" data-i18n="plugin.ptz.addBatch">+ Ajouter en série</button>
+    <button class="btn btn-green" id="ptz-add" type="button" data-i18n="plugin.ptz.add">+ Ajouter une caméra</button>
+  </div>
+
+  <!-- ── Barre d'onglets de premier niveau ─────────────────────── -->
+  <nav class="ptz-views" id="ptz-views">
+    <button class="ptz-view-tab on" data-view="fleet" type="button" data-i18n="plugin.ptz.view.fleet">Parc</button>
+    <button class="ptz-view-tab" data-view="presta" type="button" data-i18n="plugin.ptz.presta">Sélection presta</button>
+    <button class="ptz-view-tab" data-view="overview" type="button" data-i18n="plugin.ptz.overview">Vue d'ensemble</button>
+    <button class="ptz-view-tab" data-view="names" type="button" data-i18n="plugin.ptz.names">Noms des mémoires</button>
+    <button class="ptz-view-tab" data-view="snapshots" type="button" data-i18n="plugin.ptz.snapshots">Sauvegardes</button>
+    <button class="ptz-view-tab" data-view="panels" type="button" data-i18n="plugin.ptz.panels">Pupitres</button>
+    <button class="ptz-view-tab" data-view="grid" type="button" data-i18n="plugin.ptz.grid">Grille</button>
+    <button class="ptz-view-tab" data-view="shotbox" type="button" data-i18n="plugin.ptz.shotbox">Shotbox</button>
+  </nav>
+
+  <!-- ══ Vue : Parc ═════════════════════════════════════════════ -->
+  <div class="ptz-view" id="ptz-view-fleet">
+
+    <!-- Ajout en série : adresse de départ + nombre, mêmes identifiants -->
+    <form class="ptz-form" id="ptz-batch" hidden>
+      <div class="ptz-form-grid">
+        <label for="ptz-b-host" data-i18n="plugin.ptz.b.host">Première adresse IP</label>
+        <input type="text" id="ptz-b-host" placeholder="10.10.11.31">
+
+        <label for="ptz-b-count" data-i18n="plugin.ptz.b.count">Nombre de caméras</label>
+        <input type="number" id="ptz-b-count" min="1" max="64" value="4">
+
+        <label for="ptz-b-driver" data-i18n="plugin.ptz.f.driver">Marque / pilote</label>
+        <select id="ptz-b-driver"></select>
+
+        <label for="ptz-b-prefix" data-i18n="plugin.ptz.b.prefix">Préfixe de nom</label>
+        <input type="text" id="ptz-b-prefix" placeholder="Caméra">
+
+        <label for="ptz-b-first" data-i18n="plugin.ptz.b.first">Premier numéro</label>
+        <input type="number" id="ptz-b-first" min="0" value="1">
+
+        <label for="ptz-b-group" data-i18n="plugin.ptz.f.group">Groupe</label>
+        <input type="text" id="ptz-b-group" list="ptz-groups" placeholder="Plateau">
+
+        <label for="ptz-b-user" data-i18n="plugin.ptz.f.user">Identifiant (toutes)</label>
+        <input type="text" id="ptz-b-user" autocomplete="off" placeholder="admin">
+
+        <label for="ptz-b-pass" data-i18n="plugin.ptz.f.password">Mot de passe (toutes)</label>
+        <input type="password" id="ptz-b-pass" autocomplete="new-password">
+      </div>
+      <p class="ptz-form-note" id="ptz-b-preview"></p>
+      <div class="ptz-form-actions">
+        <button class="btn btn-green" type="submit" data-i18n="plugin.ptz.b.create">Créer la série</button>
+        <button class="btn" type="button" id="ptz-b-cancel" data-i18n="plugin.ptz.cancel">Annuler</button>
+      </div>
+    </form>
+
+    <!-- Formulaire ajout / édition d'une caméra -->
+    <form class="ptz-form" id="ptz-form" hidden>
+      <div class="ptz-form-grid">
+        <label for="ptz-f-camnum" class="ptz-f-camnum-lbl" data-i18n="plugin.ptz.f.camNumber">Numéro de caméra</label>
+        <input type="number" id="ptz-f-camnum" class="ptz-f-camnum-input" min="1" placeholder="(optionnel)">
+
+        <label for="ptz-f-name" data-i18n="plugin.ptz.f.name">Nom</label>
+        <input type="text" id="ptz-f-name" placeholder="Caméra plateau 1">
+
+        <label for="ptz-f-driver" data-i18n="plugin.ptz.f.driver">Marque / pilote</label>
+        <select id="ptz-f-driver"></select>
+
+        <label for="ptz-f-host" data-i18n="plugin.ptz.f.host">Adresse IP</label>
+        <input type="text" id="ptz-f-host" placeholder="10.10.20.31">
+
+        <label for="ptz-f-port" data-i18n="plugin.ptz.f.port">Port</label>
+        <input type="number" id="ptz-f-port" placeholder="80">
+
+        <label for="ptz-f-model" data-i18n="plugin.ptz.f.model">Modèle</label>
+        <select id="ptz-f-model"></select>
+
+        <label for="ptz-f-group" data-i18n="plugin.ptz.f.group">Groupe</label>
+        <input type="text" id="ptz-f-group" list="ptz-groups" placeholder="Plateau">
+        <datalist id="ptz-groups"></datalist>
+
+        <label for="ptz-f-user" data-i18n="plugin.ptz.f.user">Identifiant</label>
+        <input type="text" id="ptz-f-user" autocomplete="off" placeholder="(réglage par défaut de l'outil)">
+
+        <label for="ptz-f-pass" data-i18n="plugin.ptz.f.password">Mot de passe</label>
+        <input type="password" id="ptz-f-pass" autocomplete="new-password" placeholder="(inchangé)">
+      </div>
+      <p class="ptz-form-note" id="ptz-form-note"></p>
+      <div class="ptz-form-actions">
+        <button class="btn btn-green" type="submit" data-i18n="plugin.ptz.save">Enregistrer</button>
+        <button class="btn" type="button" id="ptz-f-cancel" data-i18n="plugin.ptz.cancel">Annuler</button>
+      </div>
+    </form>
+
+    <div class="ptz-main">
+      <section class="ptz-fleet">
+        <div class="ptz-fleet-h">
+          <label class="ptz-selall">
+            <input type="checkbox" id="ptz-selall">
+            <span data-i18n="plugin.ptz.selectAll">Tout sélectionner</span>
+          </label>
+          <label class="ptz-selall">
+            <span data-i18n="plugin.ptz.sortBy">Trier</span>
+            <select id="ptz-sort">
+              <option value="none" data-i18n="plugin.ptz.sort.none">ordre du parc</option>
+              <option value="number" data-i18n="plugin.ptz.sort.number">par numéro</option>
+              <option value="ip" data-i18n="plugin.ptz.sort.ip">par adresse IP</option>
+            </select>
+          </label>
+          <span class="ptz-count" id="ptz-count"></span>
+        </div>
+        <div class="ptz-cards" id="ptz-cards">
+          <div class="ptz-meta" data-i18n="plugin.ptz.loading">Chargement du parc…</div>
+        </div>
+      </section>
+
+      <section class="ptz-detail" id="ptz-detail">
+        <div class="ptz-meta" data-i18n="plugin.ptz.pick">Sélectionnez une caméra pour voir son détail.</div>
+      </section>
+    </div>
+
+    <!-- Barre d'actions groupées (visible dès 1 caméra cochée) -->
+    <div class="ptz-bulk" id="ptz-bulk" hidden>
+      <strong class="ptz-bulk-n" id="ptz-bulk-n"></strong>
+
+      <div class="ptz-bulk-grp">
+        <label data-i18n="plugin.ptz.bulk.preset">Mémoire</label>
+        <input type="number" id="ptz-bulk-preset" min="1" max="100" value="1">
+        <button class="btn" id="ptz-bulk-recall" type="button" data-i18n="plugin.ptz.bulk.recall">Rappeler</button>
+        <button class="btn" id="ptz-bulk-rename" type="button" data-i18n="plugin.ptz.bulk.rename">Renommer…</button>
+      </div>
+
+      <div class="ptz-bulk-grp">
+        <label data-i18n="plugin.ptz.bulk.param">Paramètre</label>
+        <select id="ptz-bulk-key"></select>
+        <span id="ptz-bulk-valbox"></span>
+        <button class="btn btn-green" id="ptz-bulk-apply" type="button" data-i18n="plugin.ptz.bulk.apply">Appliquer</button>
+      </div>
+
+      <span class="ptz-spacer"></span>
+      <button class="btn" id="ptz-bulk-identify" type="button" data-i18n="plugin.ptz.bulk.identify">Détecter les modèles</button>
+      <button class="btn" id="ptz-bulk-clear" type="button" data-i18n="plugin.ptz.bulk.clear">Désélectionner</button>
+    </div>
+  </div>
+
+  <!-- ══ Vue : Vue d'ensemble ═══════════════════════════════════ -->
+  <div class="ptz-view" id="ptz-view-overview" hidden>
+    <div class="ptz-snap-h">
+      <strong data-i18n="plugin.ptz.overview">Vue d'ensemble</strong>
+      <span class="ptz-meta" id="ptz-ov-meta"></span>
+      <span class="ptz-spacer"></span>
+      <label class="ptz-selall"><span data-i18n="plugin.ptz.sortBy">Trier</span>
+        <select id="ptz-ov-sort" class="ptz-sort-sel">
+          <option value="none" data-i18n="plugin.ptz.sort.none">ordre du parc</option>
+          <option value="number" data-i18n="plugin.ptz.sort.number">par numéro</option>
+          <option value="ip" data-i18n="plugin.ptz.sort.ip">par adresse IP</option>
+        </select></label>
+      <button class="btn" id="ptz-ov-refresh" type="button" title="Actualiser">↻</button>
+    </div>
+    <div id="ptz-ov-body"></div>
+  </div>
+
+  <!-- ══ Vue : Noms des mémoires (mémoires en COLONNES, caméras en LIGNES) ══ -->
+  <div class="ptz-view" id="ptz-view-names" hidden>
+    <div class="ptz-snap-h">
+      <strong data-i18n="plugin.ptz.names">Noms des mémoires</strong>
+      <span class="ptz-meta" id="ptz-nm-meta"></span>
+      <span class="ptz-spacer"></span>
+      <label class="ptz-selall"><span data-i18n="plugin.ptz.nm.from">De</span>
+        <input type="number" id="ptz-nm-from" min="1" value="1"></label>
+      <label class="ptz-selall"><span data-i18n="plugin.ptz.nm.to">à</span>
+        <input type="number" id="ptz-nm-to" min="1" value="100"></label>
+      <label class="ptz-selall"><input type="checkbox" id="ptz-nm-named">
+        <span data-i18n="plugin.ptz.onlyNamed">N'afficher que les nommées</span></label>
+      <label class="ptz-selall"><span data-i18n="plugin.ptz.sortBy">Trier</span>
+        <select id="ptz-nm-sort" class="ptz-sort-sel">
+          <option value="none" data-i18n="plugin.ptz.sort.none">ordre du parc</option>
+          <option value="number" data-i18n="plugin.ptz.sort.number">par numéro</option>
+          <option value="ip" data-i18n="plugin.ptz.sort.ip">par adresse IP</option>
+        </select></label>
+      <button class="btn" id="ptz-nm-refresh" type="button" title="Actualiser">↻</button>
+    </div>
+    <div id="ptz-nm-body"></div>
+  </div>
+
+  <!-- ══ Vue : Sauvegardes ══════════════════════════════════════ -->
+  <div class="ptz-view" id="ptz-view-snapshots" hidden>
+    <div class="ptz-snap-h">
+      <strong data-i18n="plugin.ptz.snapshots">Sauvegardes</strong>
+      <span class="ptz-meta" id="ptz-snap-scope"></span>
+      <span class="ptz-spacer"></span>
+      <label class="ptz-selall"><span data-i18n="plugin.ptz.snap.scope">Portée</span>
+        <select id="ptz-snap-scopesel">
+          <option value="presta" data-i18n="plugin.ptz.snap.presta">Caméras de la presta</option>
+          <option value="all" data-i18n="plugin.ptz.snap.all">Tout le parc</option>
+        </select></label>
+      <button class="btn btn-green" id="ptz-snap-new" type="button" data-i18n="plugin.ptz.snapNew">+ Nouvel instantané</button>
+    </div>
+    <div id="ptz-snap-list"></div>
+    <div id="ptz-snap-diff"></div>
+  </div>
+
+  <!-- ══ Vue : Pupitres ═════════════════════════════════════════ -->
+  <!-- Un pupitre (AW-RP200…) tient une table d'AFFECTATION : quel numéro de caméra au
+       pupitre pointe vers quelle caméra réelle. On liste les pupitres à gauche, la table
+       d'affectation du pupitre choisi à droite. Écrire, c'est toucher de la CONFIG
+       D'EXPLOITATION → confirmation explicite avant tout envoi. -->
+  <div class="ptz-view" id="ptz-view-panels" hidden>
+    <div class="ptz-snap-h">
+      <strong data-i18n="plugin.ptz.panels">Pupitres</strong>
+      <span class="ptz-meta" id="ptz-pn-meta"></span>
+      <span class="ptz-spacer"></span>
+      <button class="btn" id="ptz-pn-refresh" type="button" title="Actualiser">↻</button>
+      <button class="btn btn-green" id="ptz-pn-add" type="button" data-i18n="plugin.ptz.pn.add">+ Ajouter un pupitre</button>
+    </div>
+
+    <!-- Formulaire ajout / édition d'un pupitre -->
+    <form class="ptz-form" id="ptz-pn-form" hidden>
+      <div class="ptz-form-grid">
+        <label for="ptz-pn-name" data-i18n="plugin.ptz.f.name">Nom</label>
+        <input type="text" id="ptz-pn-name" placeholder="RP200 régie">
+
+        <label for="ptz-pn-driver" data-i18n="plugin.ptz.f.driver">Marque / pilote</label>
+        <select id="ptz-pn-driver"></select>
+
+        <label for="ptz-pn-host" data-i18n="plugin.ptz.f.host">Adresse IP</label>
+        <input type="text" id="ptz-pn-host" placeholder="10.10.11.51">
+
+        <label for="ptz-pn-port" data-i18n="plugin.ptz.f.port">Port</label>
+        <input type="number" id="ptz-pn-port" placeholder="80">
+
+        <label for="ptz-pn-model" data-i18n="plugin.ptz.f.model">Modèle</label>
+        <select id="ptz-pn-model"></select>
+
+        <label for="ptz-pn-user" data-i18n="plugin.ptz.f.user">Identifiant</label>
+        <input type="text" id="ptz-pn-user" autocomplete="off" placeholder="admin">
+
+        <label for="ptz-pn-pass" data-i18n="plugin.ptz.f.password">Mot de passe</label>
+        <input type="password" id="ptz-pn-pass" autocomplete="new-password" placeholder="(inchangé)">
+      </div>
+      <p class="ptz-form-note" id="ptz-pn-form-note"></p>
+      <div class="ptz-form-actions">
+        <button class="btn btn-green" type="submit" data-i18n="plugin.ptz.save">Enregistrer</button>
+        <button class="btn" type="button" id="ptz-pn-cancel" data-i18n="plugin.ptz.cancel">Annuler</button>
+      </div>
+    </form>
+
+    <div class="ptz-pn-main">
+      <section class="ptz-pn-list" id="ptz-pn-list">
+        <div class="ptz-meta" data-i18n="plugin.ptz.loading">Chargement…</div>
+      </section>
+      <section class="ptz-pn-assign" id="ptz-pn-assign">
+        <div class="ptz-meta" data-i18n="plugin.ptz.pn.pick">Choisissez un pupitre pour voir ses affectations.</div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ══ Vue : Sélection presta ═════════════════════════════════ -->
+  <!-- Le parc est FIXE ; on « active » des caméras pour une presta en leur donnant un numéro
+       (sans numéro = non utilisée, masquée ailleurs). Profils nommés (jeux caméra→numéro),
+       export/import du parc. -->
+  <div class="ptz-view" id="ptz-view-presta" hidden>
+    <div class="ptz-snap-h">
+      <strong data-i18n="plugin.ptz.presta">Sélection presta</strong>
+      <span class="ptz-meta" id="ptz-ps-meta"></span>
+      <span class="ptz-spacer"></span>
+      <label class="ptz-selall"><span data-i18n="plugin.ptz.ps.profile">Profil</span>
+        <select id="ptz-ps-profile"></select></label>
+      <button class="btn" id="ptz-ps-load" type="button" data-i18n="plugin.ptz.ps.load">Charger</button>
+      <button class="btn" id="ptz-ps-saveas" type="button" data-i18n="plugin.ptz.ps.saveAs">Enregistrer sous…</button>
+      <button class="btn btn-red" id="ptz-ps-del" type="button" data-i18n="plugin.ptz.ps.del">Supprimer</button>
+      <button class="btn" id="ptz-ps-export" type="button" data-i18n="plugin.ptz.ps.export">Exporter</button>
+      <button class="btn" id="ptz-ps-import" type="button" data-i18n="plugin.ptz.ps.import">Importer</button>
+      <input type="file" id="ptz-ps-file" accept="application/json" hidden>
+      <button class="btn btn-green" id="ptz-ps-apply" type="button" disabled data-i18n="plugin.ptz.ps.apply">Appliquer les numéros</button>
+    </div>
+    <div id="ptz-ps-body"></div>
+  </div>
+
+  <!-- ══ Vue : Grille ═══════════════════════════════════════════ -->
+  <!-- Un seul écran pour attribuer les numéros de caméras ET les placer dans les pupitres.
+       Lignes = caméras ; puis, par pupitre, un bloc de 10 colonnes (positions 1→10). Une
+       position ne tient qu'une caméra ; une caméra occupe au plus une position par pupitre.
+       N'écrit qu'au clic sur « Enregistrer » (numéros + affectations, positions 11+ intactes). -->
+  <div class="ptz-view" id="ptz-view-grid" hidden>
+    <div class="ptz-snap-h">
+      <strong data-i18n="plugin.ptz.grid">Grille</strong>
+      <span class="ptz-meta" id="ptz-gr-meta"></span>
+      <span class="ptz-spacer"></span>
+      <span class="ptz-meta" id="ptz-gr-pending"></span>
+      <button class="btn" id="ptz-gr-refresh" type="button" title="Actualiser">↻</button>
+      <button class="btn btn-green" id="ptz-gr-save" type="button" disabled
+        data-i18n="plugin.ptz.gr.save">Enregistrer</button>
+    </div>
+    <div id="ptz-gr-body"></div>
+  </div>
+
+  <!-- ══ Vue : Shotbox ══════════════════════════════════════════ -->
+  <!-- Grille de boutons paramétrables : chaque bouton rappelle une mémoire d'une caméra ou
+       lance une macro. Deux modes : Édition (configurer) et Utilisation (déclencher). -->
+  <div class="ptz-view" id="ptz-view-shotbox" hidden>
+    <div class="ptz-snap-h">
+      <strong data-i18n="plugin.ptz.shotbox">Shotbox</strong>
+      <label class="ptz-selall"><span data-i18n="plugin.ptz.sb.box">Shotbox</span>
+        <select id="ptz-sb-sel"></select></label>
+      <button class="btn" id="ptz-sb-new" type="button" data-i18n="plugin.ptz.sb.new">Nouvelle…</button>
+      <button class="btn btn-red" id="ptz-sb-del" type="button" data-i18n="plugin.ptz.sb.del">Supprimer</button>
+      <span class="ptz-spacer"></span>
+      <div class="ptz-pn-modes" id="ptz-sb-modes">
+        <button class="ptz-pn-modebtn on" data-mode="use" type="button" data-i18n="plugin.ptz.sb.use">Utilisation</button>
+        <button class="ptz-pn-modebtn" data-mode="edit" type="button" data-i18n="plugin.ptz.sb.edit">Édition</button>
+      </div>
+      <button class="btn" id="ptz-sb-full" type="button" data-i18n="plugin.ptz.sb.full">⛶ Plein écran</button>
+      <button class="btn btn-green" id="ptz-sb-save" type="button" disabled data-i18n="plugin.ptz.sb.save">Enregistrer</button>
+    </div>
+    <div id="ptz-sb-body"></div>
+    <button class="btn ptz-sb-exitbtn" id="ptz-sb-exit" type="button" hidden title="Quitter le plein écran (Échap)">✕</button>
+  </div>
+
+  <!-- Compte-rendu d'action groupée : toujours ligne à ligne, jamais un verdict global.
+       Hors des vues : une action groupée peut être lancée depuis le parc comme depuis
+       les sauvegardes, son résultat doit rester visible dans les deux cas. -->
+  <div class="ptz-report" id="ptz-report" hidden></div>
+</div>

@@ -1,0 +1,76 @@
+{
+  "license": "GPL-3.0-or-later",
+  "type": "ptz",
+  "label": "Caméras tourelles",
+  "version": "0.19.1",
+  "runtime": "docker",
+  "ember": true,
+  "description": "Pilotage d'un parc de caméras tourelles (PTZ) multi-marques. Architecture à PILOTES : chaque marque est un module isolé exposant le même contrat (disponibilité, identité, paramètres typés, mémoires). Pilote Panasonic (protocole AW, CGI aw_ptz / aw_cam) opérationnel ; pilote Sony (VISCA over IP) déclaré mais non implémenté. Surveillance de disponibilité en tâche de fond, lecture/écriture des paramètres, RAPPELS GROUPÉS sur plusieurs caméras à la fois (format vidéo…), gestion et renommage des mémoires. VOLET PUPITRE : parc de pupitres AW-RP et édition de leur table d'affectation caméra (pilote panasonic_rp, RP200 rétro-ingénieré en direct). Conteneur Docker isolé.",
+  "badge": {
+    "label": "PTZ",
+    "class": "tool-ptz",
+    "oklch": "0.72 0.16 305"
+  },
+  "nav": {
+    "section": "cameras",
+    "label": "Caméras",
+    "order": 10
+  },
+  "ui": {
+    "page_html": "page.html",
+    "page_js": "page.js",
+    "page_css": "page.css"
+  },
+  "docker": {
+    "image": "bobitool-ptz:0.19.1",
+    "build": true,
+    "port": 8080,
+    "volume": "/data",
+    "env_settings": [
+      "default_user",
+      "default_password",
+      "poll_interval",
+      "grid_cameras",
+      "grid_panels",
+      "grid_buttons"
+    ]
+  },
+  "config_schema": [
+    {
+      "key": "default_user",
+      "type": "text",
+      "default": "admin",
+      "label": "Identifiant par défaut (caméras sans identifiants propres)"
+    },
+    {
+      "key": "default_password",
+      "type": "text",
+      "default": "",
+      "label": "Mot de passe par défaut (caméras sans identifiants propres)"
+    },
+    {
+      "key": "poll_interval",
+      "type": "text",
+      "default": "10",
+      "label": "Intervalle de vérification de connexion (secondes)"
+    },
+    {
+      "key": "grid_cameras",
+      "type": "text",
+      "default": "100",
+      "label": "Grille : nombre de caméras exposées (lignes, et numéro maximum)"
+    },
+    {
+      "key": "grid_panels",
+      "type": "text",
+      "default": "10",
+      "label": "Grille : nombre de pupitres exposés (blocs de colonnes)"
+    },
+    {
+      "key": "grid_buttons",
+      "type": "text",
+      "default": "10",
+      "label": "Grille : nombre de boutons exposés par pupitre (colonnes par bloc)"
+    }
+  ]
+}

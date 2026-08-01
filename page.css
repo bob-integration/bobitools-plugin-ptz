@@ -1,0 +1,298 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+   Styles de l'outil « Caméras tourelles ». Vocabulaire décalqué de bmd_nmos / snp (cards,
+   dots de statut, tables) sous préfixe .ptz-*. Uniquement des variables de thème du socle
+   (DESIGN.md) — aucune couleur littérale — et .btn / .ios-toggle globaux. */
+
+.ptz-app { display: flex; flex-direction: column; gap: 14px; }
+
+.ptz-bar { display: flex; align-items: center; gap: 8px; }
+.ptz-title { font-size: 15px; }
+.ptz-spacer { flex: 1; }
+.ptz-meta { color: var(--text-muted); font-size: 13px; }
+.ptz-poll { color: var(--text-muted); font-size: 12px; }
+
+/* Formulaire ajout / édition */
+.ptz-form { background: var(--bg-soft, var(--bg-elev)); border: 1px solid var(--border);
+  padding: 14px; border-radius: var(--radius); }
+.ptz-form-grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; }
+.ptz-form-grid input, .ptz-form-grid select { width: 100%; box-sizing: border-box; }
+.ptz-form-actions { display: flex; gap: 8px; margin-top: 12px; }
+.ptz-form-note { color: var(--status-warning-fg); font-size: 12px; margin: 10px 0 0; }
+.ptz-form-note:empty { display: none; }
+
+/* Onglets de premier niveau. Même vocabulaire que les onglets du détail (.ptz-tab) pour
+   que la hiérarchie se lise : ceux-ci sont plus gros et portent la page entière. */
+.ptz-views { display: flex; gap: 2px; border-bottom: 1px solid var(--border); }
+.ptz-view-tab { background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-muted); padding: 8px 14px; cursor: pointer; font: inherit; font-size: 13.5px; }
+.ptz-view-tab:hover { color: var(--text); }
+.ptz-view-tab.on { color: var(--text-strong); border-bottom-color: var(--accent); }
+.ptz-view { display: flex; flex-direction: column; gap: 14px; }
+.ptz-view[hidden] { display: none; }
+
+/* Disposition principale : parc / détail */
+.ptz-main { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .ptz-main { grid-template-columns: 1fr; } }
+
+.ptz-fleet-h { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ptz-selall { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+.ptz-count { margin-left: auto; color: var(--text-muted); font-size: 12px; }
+
+.ptz-cards { display: flex; flex-direction: column; gap: 8px; }
+.ptz-card { border: 1px solid var(--border); background: var(--bg-elev); border-radius: var(--radius);
+  padding: 10px 12px; cursor: pointer; transition: border-color .12s; }
+.ptz-card:hover { border-color: var(--accent); }
+.ptz-card.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ptz-card.off { opacity: .55; }
+.ptz-card-h { display: flex; align-items: center; gap: 8px; }
+.ptz-card-h strong { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptz-card-h .ptz-actions { margin-left: auto; display: flex; gap: 4px; }
+.ptz-card-sub { margin-top: 5px; color: var(--text-muted); font-size: 12px;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ptz-ip { font-family: var(--font-mono); font-size: 12px; }
+.ptz-empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+.ptz-tag { display: inline-block; padding: 1px 7px; border-radius: var(--radius-small); font-size: 11px;
+  background: var(--status-unknown-bg); }
+
+/* Dot de statut. Gris = pas encore sondé — volontairement distinct de « injoignable » :
+   ne jamais afficher une caméra comme en panne tant qu'on ne l'a pas réellement testée. */
+.ptz-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--status-unknown-fg); }
+.ptz-dot.ok { background: var(--status-running-fg); }
+.ptz-dot.err { background: var(--status-stopped-fg); }
+
+/* Panneau détail */
+.ptz-detail { border: 1px solid var(--border); background: var(--bg-elev);
+  border-radius: var(--radius); padding: 14px; min-height: 160px; }
+.ptz-detail-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.ptz-detail-h strong { font-size: 14px; }
+.ptz-detail-actions { margin-left: auto; display: flex; gap: 6px; }
+.ptz-ident { color: var(--text-muted); font-size: 12px; margin-bottom: 10px; }
+
+.ptz-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.ptz-tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted);
+  padding: 6px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+.ptz-tab:hover { color: var(--text); }
+.ptz-tab.on { color: var(--text-strong); border-bottom-color: var(--accent); }
+
+/* Paramètres */
+.ptz-params { display: flex; flex-direction: column; gap: 14px; }
+.ptz-group-h { font-size: 12px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-h2); margin-bottom: 6px; }
+.ptz-prow { display: grid; grid-template-columns: 1fr minmax(140px, 220px); gap: 8px 12px;
+  align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
+.ptz-plabel { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.ptz-phelp { color: var(--text-muted); font-size: 11px; display: block; margin-top: 2px; }
+.ptz-unval { color: var(--status-warning-fg); font-size: 11px; cursor: help; }
+.ptz-pval input, .ptz-pval select { width: 100%; box-sizing: border-box; }
+.ptz-null { color: var(--text-muted); font-style: italic; font-size: 12px; }
+
+/* Mémoires */
+.ptz-presets-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.ptz-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
+.ptz-preset { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border);
+  border-radius: var(--radius-small); padding: 4px 6px; background: var(--bg); }
+.ptz-preset.named { border-color: var(--accent); }
+.ptz-pnum { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+  min-width: 24px; text-align: right; }
+.ptz-pname { flex: 1; min-width: 0; background: none; border: none; color: inherit; font: inherit;
+  font-size: 12px; padding: 2px 4px; border-radius: var(--radius-small); }
+.ptz-pname:focus { background: var(--bg-input); outline: 1px solid var(--accent); }
+.ptz-pname::placeholder { color: var(--text-muted); font-style: italic; }
+
+/* Console de mise au point */
+.ptz-console-bar { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.ptz-console-bar input { flex: 1; min-width: 160px; font-family: var(--font-mono); }
+.ptz-log { font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-small); padding: 8px; max-height: 320px; overflow: auto; }
+.ptz-log div { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+.ptz-log .err { color: var(--status-stopped-fg); }
+.ptz-log .ok { color: var(--status-running-fg); }
+.ptz-log .cmd { color: var(--text-muted); }
+
+/* Barre d'actions groupées */
+.ptz-bulk { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap; border: 1px solid var(--accent); background: var(--bg-elev);
+  border-radius: var(--radius); padding: 10px 12px; }
+.ptz-bulk-n { font-size: 13px; }
+.ptz-bulk-grp { display: flex; align-items: center; gap: 6px; }
+.ptz-bulk-grp label { color: var(--text-muted); font-size: 12px; }
+.ptz-bulk-grp input[type="number"] { width: 70px; }
+.ptz-bulk-grp select, .ptz-bulk-grp input[type="text"] { max-width: 200px; }
+
+/* Tableau des sorties vidéo (réglage général + une ligne par sortie) */
+.ptz-outputs { margin-bottom: 16px; }
+.ptz-out-tbl td, .ptz-out-tbl th { vertical-align: middle; }
+.ptz-out-tbl select, .ptz-out-tbl input[type="text"], .ptz-out-tbl input[type="number"] { width: 100%; box-sizing: border-box; }
+.ptz-out-name { white-space: nowrap; font-weight: 600; }
+.ptz-out-na { color: var(--text-muted); text-align: center; }
+
+/* Vue d'ensemble : le tableau peut être large, il défile HORIZONTALEMENT tout seul
+   plutôt que de faire déborder la page. */
+.ptz-ov-scroll { overflow-x: auto; }
+/* La matrice peut être longue : on borne sa hauteur pour que les en-têtes
+   collants aient un contexte de défilement. */
+.ptz-nm-tbl { }
+#ptz-nm-body .ptz-ov-scroll { max-height: 70vh; overflow-y: auto; }
+.ptz-ov-tbl { min-width: 100%; }
+.ptz-ov-tbl th, .ptz-ov-tbl td { white-space: nowrap; }
+.ptz-ov-link { cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--text-muted); }
+.ptz-ov-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.ptz-ov-tbl td.ptz-out-na { background: var(--status-unknown-bg); }
+
+/* Matrice des noms de mémoires : mémoires en colonnes, caméras en lignes.
+   La colonne « Caméra » reste visible pendant le défilement horizontal, sinon on ne sait
+   plus quelle ligne on remplit. */
+.ptz-nm-tbl th, .ptz-nm-tbl td { padding: 3px 5px; }
+/* La colonne « Mémoire » reste visible pendant le défilement horizontal, et l'en-tête
+   pendant le défilement vertical : sur cent lignes, on doit toujours savoir quelle mémoire
+   et quelle caméra on remplit. */
+.ptz-nm-tbl .ptz-nm-idx { position: sticky; left: 0; z-index: 1; background: var(--bg-elev);
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+  text-align: right; white-space: nowrap; border-right: 1px solid var(--border); }
+.ptz-nm-tbl thead th { position: sticky; top: 0; z-index: 2; background: var(--bg-elev); }
+.ptz-nm-tbl thead th.ptz-nm-idx { z-index: 3; }
+.ptz-nm-head { text-align: left; white-space: nowrap; }
+.ptz-nm-headname { font-weight: 600; color: var(--text-strong); }
+.ptz-nm-in { width: 110px; box-sizing: border-box; font-size: 12px; padding: 2px 4px;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-small);
+  color: inherit; }
+.ptz-nm-in:focus { outline: 1px solid var(--accent); }
+/* Fond distinct quand le nom part RÉELLEMENT dans la caméra : la portée n'est pas la même
+   qu'un nom tenu par l'outil, et ça doit se voir sans survoler. */
+.ptz-nm-in.dev { background: var(--accent-soft); }
+.ptz-nm-in:disabled { opacity: .5; }
+
+/* Caméra tombée pendant la consultation : on grise sans effacer. Les valeurs affichées
+   sont les dernières lues, ce qui vaut mieux que des cases vides. */
+.ptz-row-stale { opacity: .55; }
+.ptz-ov-cell.fail { color: var(--status-stopped-fg); }
+
+/* Sauvegardes (instantanés) */
+.ptz-snap-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ptz-snap-act { white-space: nowrap; display: flex; gap: 4px; justify-content: flex-end; }
+.ptz-gone td { color: var(--text-muted); font-style: italic; }
+.ptz-tbl td.ptz-c-toggle { width: 70px; text-align: center; }
+
+/* Compte-rendu d'action groupée */
+.ptz-report { border: 1px solid var(--border); background: var(--bg-elev);
+  border-radius: var(--radius); padding: 12px; }
+.ptz-report-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.ptz-report-h .ptz-spacer { flex: 1; }
+.ptz-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ptz-tbl th, .ptz-tbl td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.ptz-tbl th { color: var(--text-muted); font-weight: 500; font-size: 12px; }
+.ptz-tbl td.fail { color: var(--status-stopped-fg); }
+.ptz-tbl td.pass { color: var(--status-running-fg); }
+
+/* ── Pupitres ─────────────────────────────────────────────────── */
+.ptz-pn-main { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 14px;
+  align-items: start; margin-top: 12px; }
+@media (max-width: 900px) { .ptz-pn-main { grid-template-columns: 1fr; } }
+
+.ptz-pn-list { display: flex; flex-direction: column; gap: 8px; }
+.ptz-pn-card { border: 1px solid var(--border); background: var(--bg-elev);
+  border-radius: var(--radius); padding: 10px 12px; cursor: pointer; }
+.ptz-pn-card:hover { border-color: var(--accent); }
+.ptz-pn-card.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ptz-pn-card-h { display: flex; align-items: center; gap: 8px; }
+.ptz-pn-card-h strong { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ptz-pn-assign { border: 1px solid var(--border); background: var(--bg-elev);
+  border-radius: var(--radius); padding: 14px; min-height: 160px; }
+.ptz-pn-assign-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.ptz-pn-assign-h strong { font-size: 14px; }
+
+/* La table peut faire 200 lignes : elle défile dans son propre cadre, en-tête figé. */
+.ptz-pn-table-wrap { max-height: 62vh; overflow: auto; border: 1px solid var(--border);
+  border-radius: var(--radius-small); }
+.ptz-pn-table thead th { position: sticky; top: 0; z-index: 2; background: var(--bg-elev); }
+.ptz-pn-slot { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+.ptz-pn-sel { width: 100%; max-width: 360px; }
+.ptz-pn-table tr.ptz-pn-changed td { background: var(--status-warning-bg, rgba(200,160,0,.12)); }
+.ptz-empty.fail { color: var(--status-stopped-fg); }
+
+/* Numéro de caméra (puce dans l'en-tête de carte) */
+.ptz-num { font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: var(--accent); background: var(--bg-soft, var(--bg-elev));
+  border: 1px solid var(--border); border-radius: var(--radius-small);
+  padding: 0 5px; flex: 0 0 auto; }
+
+/* Saisie manuelle d'adresse dans la table d'affectation */
+.ptz-pn-manual { display: inline-flex; gap: 6px; margin-left: 8px; }
+.ptz-pn-manual .ptz-pn-mip { width: 120px; }
+.ptz-pn-manual .ptz-pn-mport { width: 64px; }
+
+/* Numéro de caméra dans le formulaire : identifiant principal → mis en avant */
+.ptz-f-camnum-lbl { font-weight: 600; color: var(--text-strong); align-self: center; }
+.ptz-f-camnum-input { font-size: 20px; font-weight: 600; font-family: var(--font-mono);
+  padding: 6px 10px; max-width: 140px; }
+
+/* Bascule Affectations / Macros du panneau pupitre */
+.ptz-pn-modes { display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
+.ptz-pn-modebtn { background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-muted); padding: 6px 14px; cursor: pointer; font: inherit; font-size: 13px; }
+.ptz-pn-modebtn:hover { color: var(--text); }
+.ptz-pn-modebtn.on { color: var(--text-strong); border-bottom-color: var(--accent); }
+
+/* Éditeur de macros */
+.ptz-mc-table td { vertical-align: middle; }
+.ptz-mc-table .ptz-mc-cam { width: 64px; }
+.ptz-mc-table .ptz-mc-param { width: 120px; }
+.ptz-mc-table .ptz-mc-int { width: 96px; }
+.ptz-mc-acts { white-space: nowrap; }
+#ptz-mc-add { margin-top: 8px; }
+
+/* Grille numéros + placement pupitres */
+.ptz-gr-tbl th, .ptz-gr-tbl td { text-align: center; }
+.ptz-gr-tbl .ptz-gr-camname { text-align: left; white-space: nowrap; }
+.ptz-gr-panelname { border-left: 2px solid var(--border); font-weight: 600; }
+.ptz-gr-pos { font-size: 11px; color: var(--text-muted); font-weight: 500; min-width: 26px; }
+.ptz-gr-num { width: 60px; }
+.ptz-gr-cell { cursor: pointer; user-select: none; color: var(--accent); font-size: 15px; }
+.ptz-gr-cell:hover { background: var(--bg-soft, var(--bg-elev)); }
+.ptz-gr-cell.on { background: var(--status-running-bg, rgba(0,160,80,.15)); }
+.ptz-gr-tbl thead th { position: sticky; top: 0; z-index: 2; background: var(--bg-elev); }
+
+/* Colonne adresse IP permanente dans la table d'affectation */
+.ptz-pn-table .ptz-pn-ip { width: 130px; font-family: var(--font-mono); font-size: 12px; }
+
+/* Shotbox */
+.ptz-sb-dims { display: flex; gap: 16px; margin: 8px 0 12px; color: var(--text-muted); font-size: 13px; }
+.ptz-sb-grid { display: grid; gap: 8px; margin-bottom: 12px; }
+.ptz-sb-cell { min-height: 64px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-elev); color: var(--text-muted); cursor: pointer; font: inherit;
+  font-size: 13px; padding: 6px; display: flex; align-items: center; justify-content: center;
+  text-align: center; overflow: hidden; }
+.ptz-sb-cell:hover { border-color: var(--accent); }
+.ptz-sb-cell.filled { color: var(--text-strong); background: var(--bg-soft, var(--bg-elev));
+  border-color: var(--accent); font-weight: 500; }
+.ptz-sb-cell.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.ptz-sb-cell.fired { background: var(--status-running-bg, rgba(0,160,80,.25)); }
+.ptz-sb-editor { border: 1px solid var(--border); background: var(--bg-elev);
+  border-radius: var(--radius); padding: 12px; display: flex; flex-wrap: wrap;
+  gap: 12px; align-items: center; }
+.ptz-sb-editor label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+
+/* Shotbox — pads style « MPC » (carrés, tactiles) */
+.ptz-sb-grid { gap: 12px; }
+.ptz-sb-cell { aspect-ratio: 1 / 1; min-height: 0; border-radius: 12px;
+  background: linear-gradient(180deg, var(--bg-soft, var(--bg-elev)), var(--bg-elev));
+  box-shadow: 0 2px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.06);
+  color: var(--text-muted); font-size: 14px; font-weight: 600;
+  transition: transform .05s ease, box-shadow .1s ease, background .1s ease; }
+.ptz-sb-cell:hover { border-color: var(--accent); }
+.ptz-sb-cell:active { transform: translateY(1px); box-shadow: inset 0 3px 8px rgba(0,0,0,.4); }
+.ptz-sb-cell.filled { color: var(--text-strong); border-color: var(--accent); }
+.ptz-sb-cell.on { box-shadow: 0 0 0 2px var(--accent), inset 0 1px 0 rgba(255,255,255,.06); }
+.ptz-sb-cell.fired { background: var(--accent); color: #fff;
+  box-shadow: 0 0 18px var(--accent); transform: translateY(1px); }
+
+/* Plein écran « scène » : la vue Shotbox couvre tout, sans menus */
+.ptz-sb-full { position: fixed; inset: 0; z-index: 9999; background: var(--bg, var(--bg-elev));
+  padding: 22px; overflow: auto; display: flex; flex-direction: column; }
+.ptz-sb-full .ptz-snap-h { display: none; }
+.ptz-sb-full #ptz-sb-body { flex: 1; display: flex; align-items: center; justify-content: center; }
+.ptz-sb-full .ptz-sb-grid { margin: 0; width: 100%; max-width: min(96vw, 96vh); }
+.ptz-sb-full .ptz-sb-cell { font-size: 22px; }
+.ptz-sb-exitbtn { position: fixed; top: 14px; right: 14px; z-index: 10000; font-size: 16px; }
