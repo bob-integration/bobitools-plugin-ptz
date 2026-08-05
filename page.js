@@ -52,11 +52,23 @@ window.BTTools.ptz = (function () {
             $(sel).addEventListener("change", renderNames));
         $("#ptz-nm-named").addEventListener("change", renderNames);
         $("#ptz-ov-refresh").addEventListener("click", loadOverview);
+        $("#ptz-rcp-refresh").addEventListener("click", () => loadRcp());
+        $("#ptz-rcp-setref").addEventListener("click", rcpSetReference);
+        $("#ptz-rcp-clearref").addEventListener("click", rcpClearReference);
+        $("#ptz-rcp-exportcsv").addEventListener("click", rcpExportCsv);
+        $("#ptz-rcp-style").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) rcpSetStyle(b.dataset.s); });
+        $("#ptz-rcp-view").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) rcpSetViewMode(b.dataset.v); });
+        $("#ptz-rcp-cmp").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) rcpSetValueMode(b.dataset.m); });
+        // Glisser des rotatifs : gestionnaires globaux (le contrôle est repeint sous eux).
+        document.addEventListener("mousemove", rcpOnDragMove);
+        document.addEventListener("mouseup", rcpOnDragUp);
+        document.addEventListener("touchmove", rcpOnDragMove, { passive: false });
+        document.addEventListener("touchend", rcpOnDragUp);
         $("#ptz-f-cancel").addEventListener("click", hideForm);
         $("#ptz-form").addEventListener("submit", onFormSubmit);
         $("#ptz-f-driver").addEventListener("change", onDriverChange);
         $("#ptz-selall").addEventListener("change", onSelectAll);
-        ["#ptz-sort", "#ptz-ov-sort", "#ptz-nm-sort"].forEach((sel) => {
+        ["#ptz-sort", "#ptz-ov-sort", "#ptz-nm-sort", "#ptz-rcp-sort"].forEach((sel) => {
             const el = $(sel);
             if (el) el.addEventListener("change", (e) => setFleetSort(e.target.value));
         });
@@ -98,9 +110,18 @@ window.BTTools.ptz = (function () {
 
     function unmount() {
         if (timer) clearInterval(timer);
-        if (document.removeEventListener) document.removeEventListener("fullscreenchange", sbOnFsChange);
+        if (document.removeEventListener) {
+            document.removeEventListener("fullscreenchange", sbOnFsChange);
+            document.removeEventListener("mousemove", rcpOnDragMove);
+            document.removeEventListener("mouseup", rcpOnDragUp);
+            document.removeEventListener("touchmove", rcpOnDragMove);
+            document.removeEventListener("touchend", rcpOnDragUp);
+        }
+        Object.keys(rcpTimers).forEach((k) => { clearTimeout(rcpTimers[k]); delete rcpTimers[k]; });
         timer = null; ctx = root = null;
         cams = []; catalog = []; selected = new Set(); selId = null; schemaCache = {};
+        rcpData = {}; rcpErr = {}; rcpRef = null; rcpRefDate = null; rcpRefId = null; rcpPinsId = null;
+        rcpStoreOk = null; rcpDrag = null; rcpDragActive = false; rcpRenderPending = false;
     }
 
     function applyI18n() {
@@ -113,7 +134,7 @@ window.BTTools.ptz = (function () {
 
     // ── Chargement ───────────────────────────────────────────
     // Le parc a changé : les vues transverses ne reflètent plus la réalité.
-    const invalidateViews = () => { delete viewLoaded.overview; delete viewLoaded.names; };
+    const invalidateViews = () => { delete viewLoaded.overview; delete viewLoaded.names; delete viewLoaded.rcp; };
 
     async function refresh() {
         try {
@@ -159,6 +180,12 @@ window.BTTools.ptz = (function () {
                 ctx.api("cameras/" + c.id + "/names")
                     .then((d) => { nmData[c.id] = d; renderNames(); })
                     .catch((e) => { nmErr[c.id] = e.message; fillNamesColumn(c.id); });
+            }
+            if (view === "rcp" && (rcpErr[c.id] || !rcpData[c.id])) {
+                delete rcpErr[c.id];
+                ctx.api("cameras/" + c.id + "/params")
+                    .then((d) => { rcpData[c.id] = rcpColorOf(d); renderRcp(); })
+                    .catch((e) => { rcpErr[c.id] = e.message; renderRcp(); });
             }
         });
     }
@@ -244,12 +271,13 @@ window.BTTools.ptz = (function () {
     // le tri dans l'une le reflète partout, et les trois sélecteurs restent synchronisés.
     function setFleetSort(v) {
         fleetSort = v;
-        ["#ptz-sort", "#ptz-ov-sort", "#ptz-nm-sort"].forEach((sel) => {
+        ["#ptz-sort", "#ptz-ov-sort", "#ptz-nm-sort", "#ptz-rcp-sort"].forEach((sel) => {
             const el = $(sel); if (el) el.value = v;
         });
         if (view === "fleet") renderFleet();
         else if (view === "overview") renderOverview();
         else if (view === "names") renderNames();
+        else if (view === "rcp") renderRcp();
     }
 
     // « Utilisée » = a un numéro. Une caméra sans numéro n'est pas prise sur la presta : elle
@@ -569,7 +597,7 @@ window.BTTools.ptz = (function () {
     async function setPower(on) {
         try {
             await ctx.api("cameras/" + selId + "/power", { body: { on } });
-            toast(on ? tr("plugin.ptz.poweredOn", "Caméra allumée")
+            toast(on ? tr("plugin.ptz.poweredOn", "Réveil en cours… (jusqu'à ~30 s selon le modèle)")
                      : tr("plugin.ptz.poweredOff", "Caméra en veille"), "info");
         } catch (e) { toast(e.message, "error"); }
     }
@@ -695,6 +723,11 @@ window.BTTools.ptz = (function () {
             const rep = (r.report || {})[key] || {};
             if (rep.ok) toast(tr("plugin.ptz.written", "Paramètre appliqué"), "info");
             else toast(rep.error || tr("plugin.ptz.writeFail", "Écriture refusée"), "error");
+            // Un réglage peut en contraindre d'autres (sur Sony, le Rec Format filtre les
+            // options de codec/scan et la liste des sorties SDI/HDMI). On relit le schéma pour
+            // recalculer le masquage et les valeurs. delete du cache : on veut du frais.
+            delete schemaCache[selId];
+            await tabParams();
         } catch (e) { toast(e.message, "error"); }
     }
 
@@ -836,7 +869,7 @@ window.BTTools.ptz = (function () {
             b.classList.toggle("on", b.dataset.view === name));
         const load = { overview: loadOverview, names: loadNames, snapshots: loadSnaps,
                        panels: loadPanels, grid: loadGrid, presta: loadPresta,
-                       shotbox: loadShotbox }[name];
+                       shotbox: loadShotbox, rcp: loadRcp }[name];
         if (load && !viewLoaded[name]) { viewLoaded[name] = true; load(); }
         if (name === "snapshots") $("#ptz-snap-scope").textContent = snapScope();
     }
@@ -942,6 +975,848 @@ window.BTTools.ptz = (function () {
             ? `${ok + ko}/${cams.length} ${tr("plugin.ptz.read", "lue(s)")}…`
             : `${ok} ${tr("plugin.ptz.read", "lue(s)")}` +
               (ko ? ` · ${ko} ${tr("plugin.ptz.failed", "échec(s)")}` : "");
+    }
+
+    // ── Vue RCP (pupitre colorimétrie) ───────────────────────
+    // Vrai pupitre RCP : caméras en COLONNES, réglages colorimétriques en LIGNES groupées.
+    // L'onglet ne code AUCUNE marque ni aucun réglage en dur : il garde tout paramètre dont
+    // le pilote déclare `color === true`. Les caméras de marques différentes n'ayant pas les
+    // mêmes réglages, on fait l'UNION par (group, triplet|key) ; une caméra qui n'a pas un
+    // réglage montre « — ». Deux ergonomies au choix (rotatifs / boutons ±), deux vues
+    // (complète / compacte avec ★), R/V/B côte à côte, référence + décalage par cellule.
+    let rcpData = {};                  // { camId: { byKey:{key:param}, values:{key:val} } }
+    let rcpErr = {};                   // { camId: message }
+    let rcpRef = null;                 // { camId: { key: value } } | null
+    let rcpRefDate = null;             // date ISO de la mémorisation | null
+    let rcpStyle = "knob";             // ergonomie des contrôles int : knob | step
+    let rcpViewMode = "full";          // vue : full (tout) | compact (épinglés)
+    let rcpValueMode = "delta";        // affichage : delta (valeur+écart, pilotable) | ref (valeur de référence, lecture)
+    let rcpPins = new Set();           // identifiants de lignes épinglées (★)
+    const rcpTimers = {};              // débounce d'écriture par "camId|key"
+    let rcpDrag = null;                // rotatif en cours de glissement { camId, key, startY, startVal }
+    let rcpDragActive = false;         // un glissement est en cours (gèle le re-rendu global)
+    let rcpRenderPending = false;      // un re-rendu a été demandé pendant un glissement
+
+    // Persistance de la référence. On PRÉFÈRE ctx.store (niveau app, partagé entre
+    // utilisateurs) ; mais l'outil ptz n'ouvre pas le store générique (`store_api`), donc
+    // ctx.store répond 403 : on se replie alors sur localStorage, propre au poste. Le premier
+    // accès détermine lequel est utilisable et on s'y tient ensuite.
+    const RCP_SCOPE = "rcp";
+    const RCP_REF_NAME = "color_reference";
+    const RCP_PINS_NAME = "pinned_rows";
+    const RCP_LS_REF = "ptz_color_reference";
+    const RCP_LS_PINS = "ptz_rcp_pins";
+    const RCP_LS_STYLE = "ptz_rcp_style";
+    const RCP_LS_VIEW = "ptz_rcp_view";
+    const RCP_LS_CMP = "ptz_rcp_valmode";
+    let rcpStoreOk = null;             // null=inconnu · true=ctx.store · false=localStorage
+    let rcpRefId = null;               // id de l'entrée store « référence » (si ctx.store)
+    let rcpPinsId = null;              // id de l'entrée store « épingles » (si ctx.store)
+
+    // Un seul list() pour la référence ET les épingles (même scope). Détermine du même coup
+    // si le store applicatif répond (store_api) ; sinon on se rabat sur localStorage.
+    async function rcpStoreItems() {
+        if (rcpStoreOk === false || !ctx.store) return null;
+        try { const items = await ctx.store.list(RCP_SCOPE); rcpStoreOk = true; return items || []; }
+        catch (e) { rcpStoreOk = false; return null; }
+    }
+
+    async function rcpPersist(name, idRef, payload) {
+        if (rcpStoreOk !== false && ctx.store) {
+            try {
+                if (idRef.id) await ctx.store.update(idRef.id, { value: payload });
+                else { const r = await ctx.store.create(name, payload, { scope: RCP_SCOPE, unique: true }); idRef.id = r && r.id; }
+                rcpStoreOk = true; return true;
+            } catch (e) { rcpStoreOk = false; }
+        }
+        return false;
+    }
+
+    async function rcpRefPersist(payload) {
+        const ref = { id: rcpRefId };
+        const ok = await rcpPersist(RCP_REF_NAME, ref, payload);
+        rcpRefId = ref.id;
+        if (!ok) { try { localStorage.setItem(RCP_LS_REF, JSON.stringify(payload)); } catch (e) { /* quota */ } }
+    }
+
+    async function rcpRefRemove() {
+        if (rcpStoreOk && rcpRefId) { try { await ctx.store.remove(rcpRefId); } catch (e) { /* ignore */ } }
+        rcpRefId = null;
+        try { localStorage.removeItem(RCP_LS_REF); } catch (e) { /* ignore */ }
+    }
+
+    async function rcpPinsPersist() {
+        const payload = [...rcpPins];
+        const ref = { id: rcpPinsId };
+        const ok = await rcpPersist(RCP_PINS_NAME, ref, payload);
+        rcpPinsId = ref.id;
+        if (!ok) { try { localStorage.setItem(RCP_LS_PINS, JSON.stringify(payload)); } catch (e) { /* quota */ } }
+    }
+
+    function rcpLsGet(key) {
+        try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+    }
+
+    // Ne garde que les paramètres colorimétriques (`color === true`), dans l'ordre du schéma.
+    function rcpColorOf(d) {
+        const schema = (d && d.schema) || [];
+        const values = (d && d.values) || {};
+        const byKey = {};
+        schema.filter((p) => p.color === true).forEach((p) => { byKey[p.key] = p; });
+        return { byKey, values };
+    }
+
+    const rcpCams = () => sortedCams().filter(isNumbered);
+
+    async function loadRcp() {
+        rcpData = {}; rcpErr = {};
+        // Préférences perso (ergonomie + vue) : poste local.
+        rcpStyle = (localStorage.getItem(RCP_LS_STYLE) === "step") ? "step" : "knob";
+        rcpViewMode = (localStorage.getItem(RCP_LS_VIEW) === "compact") ? "compact" : "full";
+        rcpValueMode = (localStorage.getItem(RCP_LS_CMP) === "ref") ? "ref" : "delta";
+        // Référence + épingles : partagées via ctx.store si dispo, sinon localStorage.
+        const items = await rcpStoreItems();
+        let refPayload, pinsPayload;
+        if (items) {
+            const r = items.find((x) => x.name === RCP_REF_NAME);
+            rcpRefId = r ? r.id : null; refPayload = r ? r.value : null;
+            const p = items.find((x) => x.name === RCP_PINS_NAME);
+            rcpPinsId = p ? p.id : null; pinsPayload = p ? p.value : null;
+        } else {
+            refPayload = rcpLsGet(RCP_LS_REF); pinsPayload = rcpLsGet(RCP_LS_PINS);
+        }
+        rcpRef = refPayload && refPayload.ref ? refPayload.ref : null;
+        rcpRefDate = refPayload && refPayload.date ? refPayload.date : null;
+        rcpPins = new Set(Array.isArray(pinsPayload) ? pinsPayload : []);
+        renderRcp();
+        // Remplissage progressif : une caméra lente ou morte ne retient pas les autres.
+        rcpCams().forEach((c) => {
+            ctx.api("cameras/" + c.id + "/params")
+                .then((d) => { rcpData[c.id] = rcpColorOf(d); delete rcpErr[c.id]; renderRcp(); })
+                .catch((e) => { rcpErr[c.id] = e.message; renderRcp(); });
+        });
+    }
+
+    function rcpSetStyle(s) {
+        if (s !== "knob" && s !== "step") return;
+        rcpStyle = s;
+        try { localStorage.setItem(RCP_LS_STYLE, s); } catch (e) { /* ignore */ }
+        renderRcp();
+    }
+
+    function rcpSetViewMode(v) {
+        if (v !== "full" && v !== "compact") return;
+        rcpViewMode = v;
+        try { localStorage.setItem(RCP_LS_VIEW, v); } catch (e) { /* ignore */ }
+        renderRcp();
+    }
+
+    // « Écart » (defaut) : chaque cellule montre la valeur COURANTE + le décalage vs référence,
+    // et pilote la caméra. « Référence » : chaque cellule affiche la valeur de RÉFÉRENCE
+    // mémorisée (la cible) et passe en lecture seule (aucune écriture au survol/drag/clic).
+    function rcpSetValueMode(m) {
+        if (m !== "delta" && m !== "ref") return;
+        rcpValueMode = m;
+        try { localStorage.setItem(RCP_LS_CMP, m); } catch (e) { /* ignore */ }
+        renderRcp();
+    }
+
+    function rcpTogglePin(rid) {
+        if (!rid) return;
+        if (rcpPins.has(rid)) rcpPins.delete(rid); else rcpPins.add(rid);
+        rcpPinsPersist();
+        renderRcp();
+    }
+
+    function syncRcpToggles() {
+        const st = $("#ptz-rcp-style");
+        if (st) st.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.s === rcpStyle));
+        const vw = $("#ptz-rcp-view");
+        if (vw) vw.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === rcpViewMode));
+        const cm = $("#ptz-rcp-cmp");
+        if (cm) cm.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.m === rcpValueMode));
+    }
+
+    // Décalage d'une cellule vs référence de CETTE caméra pour CE réglage. `int` → delta
+    // signé ; enum/bool/text → « modifié » si différent. Rien si aucune référence pour ce
+    // couple (caméra, réglage).
+    function rcpRefVal(camId, key) {
+        return rcpRef && rcpRef[camId] ? rcpRef[camId][key] : undefined;
+    }
+
+    // Valeur à AFFICHER dans une cellule selon la bascule : en mode « Référence » c'est la
+    // valeur mémorisée (la cible ; null si aucune), sinon la valeur courante lue sur la caméra.
+    function rcpCellVal(camId, key) {
+        if (rcpValueMode === "ref") { const v = rcpRefVal(camId, key); return v === undefined ? null : v; }
+        const dd = rcpData[camId];
+        return dd ? dd.values[key] : null;
+    }
+    // Les cellules sont-elles en lecture seule ? (mode « Référence » = on regarde la cible.)
+    const rcpReadonly = () => rcpValueMode === "ref";
+
+    // Canaux R/V/B : lettre affichée + couleur. `G` (green) et `V` (vert) sont synonymes.
+    const RCP_CH = {
+        R: { L: "R", c: "var(--rcp-cR)" },
+        G: { L: "V", c: "var(--rcp-cV)" },
+        V: { L: "V", c: "var(--rcp-cV)" },
+        B: { L: "B", c: "var(--rcp-cB)" },
+    };
+    const rcpChanOrder = (ch) => ch === "R" ? 0 : (ch === "G" || ch === "V") ? 1 : ch === "B" ? 2 : 3;
+
+    const rcpNum = (v) => (v === null || v === undefined || v === "") ? NaN : Number(v);
+
+    function rcpClamp(p, v) {
+        const s = (p.step && p.step > 0) ? p.step : 1;
+        let x = Math.round(v / s) * s;
+        x = Math.round(x * 1e6) / 1e6;                 // évite les artefacts flottants
+        if (p.min != null) x = Math.max(p.min, x);
+        if (p.max != null) x = Math.min(p.max, x);
+        return x;
+    }
+    // Pas d'un cran : petit pas (`step`) ou grand pas (`big`, à défaut 10×step) si Alt/Maj.
+    function rcpStepVal(p, cur, dir, big) {
+        const step = big ? (p.big || (p.step || 1) * 10) : (p.step || 1);
+        const base = isNaN(rcpNum(cur)) ? (p.min != null ? p.min : 0) : rcpNum(cur);
+        return rcpClamp(p, base + step * dir);
+    }
+
+    // Géométrie du rotatif (arc -135°→+135°), en coordonnées du viewBox 74×70.
+    const RCP_KA0 = -135, RCP_KA1 = 135, RCP_KR = 27, RCP_KCX = 37, RCP_KCY = 34;
+    function rcpKnobAng(v, min, max) {
+        const lo = (min == null ? 0 : min), hi = (max == null ? 100 : max);
+        let t = (hi > lo) ? (rcpNum(v) - lo) / (hi - lo) : 0;
+        if (isNaN(t)) t = 0;
+        t = Math.max(0, Math.min(1, t));
+        return RCP_KA0 + (RCP_KA1 - RCP_KA0) * t;
+    }
+    const rcpPolar = (deg, r) => {
+        const rad = (deg - 90) * Math.PI / 180;
+        return [RCP_KCX + r * Math.cos(rad), RCP_KCY + r * Math.sin(rad)];
+    };
+    function rcpArc(from, to, r) {
+        const a = rcpPolar(from, r), b = rcpPolar(to, r);
+        const large = (to - from) > 180 ? 1 : 0;
+        return `M${a[0].toFixed(1)},${a[1].toFixed(1)} A${r},${r} 0 ${large} 1 ${b[0].toFixed(1)},${b[1].toFixed(1)}`;
+    }
+    function rcpKnobSvg(v, min, max, color, size) {
+        const ang = rcpKnobAng(v, min, max);
+        const p = rcpPolar(ang, RCP_KR - 3), i = rcpPolar(ang, 13);
+        const h = Math.round(size * 70 / 74);
+        return `<svg class="rcp-knob-svg" width="${size}" height="${h}" viewBox="0 0 74 70">
+            <circle cx="37" cy="34" r="30" fill="var(--rcp-hub-out)" stroke="var(--rcp-edge2)"/>
+            <circle cx="37" cy="34" r="21" fill="var(--rcp-hub-in)" stroke="var(--rcp-edge2)"/>
+            <path d="${rcpArc(RCP_KA0, RCP_KA1, RCP_KR)}" stroke="var(--rcp-edge2)" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <path class="rcp-arc" d="${rcpArc(RCP_KA0, ang, RCP_KR)}" stroke="${color}" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <line class="rcp-ptr" x1="${i[0].toFixed(1)}" y1="${i[1].toFixed(1)}" x2="${p[0].toFixed(1)}" y2="${p[1].toFixed(1)}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>
+          </svg>`;
+    }
+    // Police de la valeur : rétrécit à 4-5 chiffres pour rester dans le rotatif.
+    const rcpFont = (val, base) => { const n = String(val).length; return n >= 5 ? base - 4 : n >= 4 ? base - 2.5 : base; };
+    const rcpValInner = (p, val) => `${esc(val)}${p.unit ? `<span class="rcp-u">${esc(p.unit)}</span>` : ""}`;
+
+    // Décalage int vs référence de CETTE caméra : pastille signée (bleu +, rose −, vert = réf).
+    function rcpDeltaBadge(p, camId, key, val) {
+        if (rcpValueMode === "ref") return "";   // on affiche déjà la référence : pas de décalage
+        const ref = rcpRefVal(camId, key);
+        if (ref === undefined) return "";
+        const c = rcpNum(val), r = rcpNum(ref);
+        if (isNaN(c) || isNaN(r)) return "";
+        const d = c - r, cls = d > 0 ? "pos" : d < 0 ? "neg" : "zero";
+        return `<span class="rcp-delta ${cls}" title="${esc(tr("plugin.ptz.rcp.ref", "référence"))} : ${esc(r)}">${d > 0 ? "+" : ""}${d}</span>`;
+    }
+    // Décalage enum/bool/text : pastille « modifié » si différent, « = » discret si à la réf.
+    function rcpModBadge(camId, key, val) {
+        if (rcpValueMode === "ref") return "";   // on affiche déjà la référence : pas de décalage
+        const ref = rcpRefVal(camId, key);
+        if (ref === undefined) return "";
+        if (val === ref) return `<span class="rcp-mod zero">=</span>`;
+        return `<span class="rcp-mod on" title="${esc(tr("plugin.ptz.rcp.ref", "référence"))} : ${esc(fmtVal(ref))}">${esc(tr("plugin.ptz.rcp.modified", "modifié"))}</span>`;
+    }
+
+    // Libellé d'une ligne trio, dérivé des membres : préfixe de mots communs + canaux présents
+    // (« Pedestal rouge »/« Pedestal bleu » → « Pedestal R·B »).
+    function rcpWordPrefix(labels) {
+        if (!labels.length) return "";
+        const split = labels.map((s) => String(s).trim().split(/\s+/));
+        const first = split[0], out = [];
+        for (let i = 0; i < first.length; i++) {
+            const w = first[i];
+            if (split.every((a) => a[i] === w)) out.push(w); else break;
+        }
+        return out.join(" ");
+    }
+    function rcpTripletLabel(labels, channels) {
+        const chans = channels.slice().sort((a, b) => rcpChanOrder(a) - rcpChanOrder(b))
+            .map((ch) => RCP_CH[ch] ? RCP_CH[ch].L : ch).join("·");
+        const base = rcpWordPrefix(labels);
+        return base ? `${base} ${chans}` : (chans || (labels[0] || ""));
+    }
+
+    // Union ordonnée des réglages : groupe → lignes. Une ligne est SOIT « simple » (une clé),
+    // SOIT « trio » (tous les paramètres partageant un même `triplet` dans ce groupe). Ordre de
+    // première apparition (caméras triées, puis ordre du schéma).
+    function rcpBuildGroups(list) {
+        const order = [], gmap = {};
+        list.forEach((c) => {
+            const dd = rcpData[c.id];
+            if (!dd) return;
+            Object.keys(dd.byKey).forEach((key) => {
+                const p = dd.byKey[key], g = p.group || "";
+                let G = gmap[g];
+                if (!G) { G = gmap[g] = { name: g, rows: [], rmap: {} }; order.push(G); }
+                if (p.triplet) {
+                    const rid = "t:" + g + ":" + p.triplet;
+                    let row = G.rmap[rid];
+                    if (!row) {
+                        row = G.rmap[rid] = { id: rid, kind: "triplet", group: g, triplet: p.triplet,
+                            labels: new Set(), channels: new Set() };
+                        G.rows.push(row);
+                    }
+                    row.labels.add(p.label);
+                    if (p.channel) row.channels.add(p.channel);
+                } else {
+                    const rid = "k:" + g + ":" + key;
+                    if (!G.rmap[rid]) {
+                        G.rmap[rid] = { id: rid, kind: "simple", group: g, key: key, label: p.label, unit: p.unit };
+                        G.rows.push(G.rmap[rid]);
+                    }
+                }
+            });
+        });
+        order.forEach((G) => G.rows.forEach((row) => {
+            if (row.kind === "triplet") row.label = rcpTripletLabel([...row.labels], [...row.channels]);
+        }));
+        return order;
+    }
+
+    function renderRcp() {
+        const body = $("#ptz-rcp-body");
+        if (!body) return;
+        if (rcpDragActive) { rcpRenderPending = true; return; }   // ne pas casser un glissement
+        updateRcpMeta(); syncRcpToggles();
+        const list = rcpCams();
+        if (!list.length) {
+            body.innerHTML = `<div class="ptz-empty">${esc(tr("plugin.ptz.rcp.none",
+                "Aucune caméra de presta (numérotée) à afficher."))}</div>`;
+            return;
+        }
+        const groups = rcpBuildGroups(list);
+        if (!groups.some((g) => g.rows.length)) {
+            const settled = list.every((c) => rcpData[c.id] || rcpErr[c.id]);
+            body.innerHTML = `<div class="ptz-empty">${esc(settled
+                ? tr("plugin.ptz.rcp.noColor", "Aucun réglage colorimétrique exposé par ces caméras.")
+                : tr("plugin.ptz.reading", "Lecture…"))}</div>`;
+            return;
+        }
+        const compact = rcpViewMode === "compact";
+        const shown = groups
+            .map((g) => ({ name: g.name, rows: g.rows.filter((r) => !compact || rcpPins.has(r.id)) }))
+            .filter((g) => g.rows.length);
+        if (compact && !shown.length) {
+            body.innerHTML = `<div class="ptz-empty">${esc(tr("plugin.ptz.rcp.noPins",
+                "Aucun réglage épinglé. Passez en vue Complète et cliquez ★."))}</div>`;
+            return;
+        }
+        const cols = `minmax(150px,190px) repeat(${list.length}, minmax(120px, 1fr))`;
+        const heads = `<div class="rcp-row rcp-heads">
+            <div class="rcp-rail"><span class="rcp-railk">${esc(tr("plugin.ptz.rcp.setting", "Réglage"))}</span></div>
+            ${list.map(rcpChanHead).join("")}
+          </div>`;
+        const rowsHtml = shown.map((g) => `
+            <div class="rcp-row"><div class="rcp-grouphead">${esc(g.name)}</div></div>
+            ${g.rows.map((row) => `<div class="rcp-row rcp-setrow">
+                <div class="rcp-rail">
+                  ${compact ? "" : `<button class="rcp-pin ${rcpPins.has(row.id) ? "on" : ""}" data-pin="${esc(row.id)}"
+                      title="${esc(tr("plugin.ptz.rcp.pin", "Épingler (vue Compacte)"))}">${rcpPins.has(row.id) ? "★" : "☆"}</button>`}
+                  <span class="rcp-rlabel">${esc(row.label)}</span>
+                </div>
+                ${list.map((c) => rcpCellHtml(row, c)).join("")}
+              </div>`).join("")}`).join("");
+        body.innerHTML = `<div class="rcp-console${rcpReadonly() ? " rcp-refmode" : ""}" style="--rcp-cols:${cols}"><div class="rcp-grid">${heads}${rowsHtml}</div></div>`;
+        rcpBindWall(body);
+        applyStatusDots();
+    }
+
+    function rcpChanHead(c) {
+        const num = c.cam_number != null ? `N°${esc(c.cam_number)}` : "";
+        const model = (c.identity && c.identity.model) || c.model || "";
+        const err = rcpErr[c.id];
+        return `<div class="rcp-chan ${err ? "err" : ""}">
+            <span class="rcp-no"><span class="ptz-dot" data-dot-for="${esc(c.id)}"></span>${num ? " " + num : ""}</span>
+            <span class="rcp-nm">${esc(c.name)}</span>
+            <span class="rcp-md">${err ? esc(tr("plugin.ptz.unreachable", "injoignable")) : esc(model)}</span>
+          </div>`;
+    }
+
+    // Cellule d'une caméra pour une ligne. Trio → les mini-contrôles de chaque canal présent,
+    // colorés R/V/B ; simple → le contrôle du type déclaré. Absent → « — », non lu → tiret sourd.
+    function rcpCellHtml(row, c) {
+        const dd = rcpData[c.id];
+        if (rcpErr[c.id]) return `<div class="rcp-cell rcp-na" title="${esc(rcpErr[c.id])}">—</div>`;
+        if (!dd) return `<div class="rcp-cell rcp-loading">…</div>`;
+        if (row.kind === "triplet") {
+            const members = Object.keys(dd.byKey).map((k) => dd.byKey[k])
+                .filter((p) => p.triplet === row.triplet && (p.group || "") === row.group);
+            if (!members.length) return `<div class="rcp-cell rcp-na">—</div>`;
+            members.sort((a, b) => rcpChanOrder(a.channel) - rcpChanOrder(b.channel));
+            return `<div class="rcp-cell"><div class="rcp-triplet">${members.map((p) => rcpNumControl(c, p, true)).join("")}</div></div>`;
+        }
+        const p = dd.byKey[row.key];
+        if (!p) return `<div class="rcp-cell rcp-na">—</div>`;
+        return `<div class="rcp-cell">${rcpControl(c, p)}</div>`;
+    }
+
+    function rcpControl(c, p) {
+        if (!p.writable) return rcpRoControl(c, p);
+        if (p.type === "int") return rcpNumControl(c, p, false);
+        if (p.type === "bool") return rcpBoolControl(c, p);
+        if (p.type === "enum") return rcpEnumControl(c, p);
+        return rcpTextControl(c, p);
+    }
+
+    // Contrôle int : rotatif (arc + glisser/molette) OU stepper vertical (+ au-dessus, − en
+    // dessous), selon la bascule « Contrôle ». `mini` = un canal d'un trio (petit, coloré).
+    function rcpNumControl(c, p, mini) {
+        const camId = c.id, key = p.key;
+        const val = rcpCellVal(camId, key);
+        if (!p.writable) return rcpRoControl(c, p);       // canal d'un trio en lecture seule
+        const chan = mini ? RCP_CH[p.channel] : null;
+        const color = chan ? chan.c : "var(--rcp-amber)";
+        const cap = chan ? chan.L : "";
+        const attrs = `data-ctl-cam="${esc(camId)}" data-ctl-key="${esc(key)}" data-ptype="int"`;
+        if (val === null || val === undefined) {
+            return `<div class="rcp-mini-na" ${attrs} title="${esc(tr("plugin.ptz.notRead", "non lu"))}">–${cap
+                ? ` <span class="rcp-cap" style="color:${color}">${esc(cap)}</span>` : ""}</div>`;
+        }
+        const base = mini ? 12 : 15;
+        const valHtml = `<span class="rcp-val" data-editable="1" style="font-size:${rcpFont(val, base)}px">${rcpValInner(p, val)}</span>`;
+        const delta = `<div class="rcp-delta-slot">${rcpDeltaBadge(p, camId, key, val)}</div>`;
+        const capHtml = cap ? `<div class="rcp-cap" style="color:${color}">${esc(cap)}</div>` : "";
+        if (rcpStyle === "knob") {
+            const size = mini ? 54 : 74, dh = Math.round(size * 70 / 74);
+            return `<div class="rcp-knob ${mini ? "mini" : "big"}" ${attrs} style="--c:${color};--rcp-dh:${dh}px">
+                ${delta}${rcpKnobSvg(val, p.min, p.max, color, size)}
+                <div class="rcp-valwrap">${valHtml}</div>${capHtml}</div>`;
+        }
+        return `<div class="rcp-stp ${mini ? "mini" : "big"}" ${attrs} style="--c:${color}" tabindex="0">
+            ${delta}
+            <button class="rcp-sbtn rcp-up" data-d="1" tabindex="-1" type="button">+</button>
+            ${valHtml}
+            <button class="rcp-sbtn rcp-dn" data-d="-1" tabindex="-1" type="button">−</button>
+            ${capHtml}</div>`;
+    }
+
+    function rcpEnumControl(c, p) {
+        const camId = c.id, key = p.key, val = rcpCellVal(camId, key);
+        const unread = val === null || val === undefined;
+        const opts = (p.options || []).map((o) =>
+            `<option value="${esc(o.value)}" ${o.value === val ? "selected" : ""}>${esc(o.label)}</option>`).join("");
+        return `<div class="rcp-sel" data-ctl-cam="${esc(camId)}" data-ctl-key="${esc(key)}" data-ptype="enum">
+            <select><option value="">${esc(unread ? tr("plugin.ptz.notRead", "non lu") : "—")}</option>${opts}</select>
+            <div class="rcp-cap">${rcpModBadge(camId, key, val)}</div></div>`;
+    }
+
+    function rcpBoolControl(c, p) {
+        const camId = c.id, key = p.key, val = rcpCellVal(camId, key);
+        return `<div class="rcp-tgl" data-ctl-cam="${esc(camId)}" data-ctl-key="${esc(key)}" data-ptype="bool">
+            <div class="rcp-switch ${val === true ? "on" : ""}" role="switch" aria-checked="${val === true}"></div>
+            <div class="rcp-cap">${rcpModBadge(camId, key, val)}</div></div>`;
+    }
+
+    function rcpTextControl(c, p) {
+        const camId = c.id, key = p.key, val = rcpCellVal(camId, key);
+        const unread = val === null || val === undefined;
+        return `<div class="rcp-txt" data-ctl-cam="${esc(camId)}" data-ctl-key="${esc(key)}" data-ptype="text">
+            <input type="text" class="rcp-tin" value="${unread ? "" : esc(val)}" placeholder="${esc(tr("plugin.ptz.notRead", "non lu"))}">
+            <div class="rcp-cap">${rcpModBadge(camId, key, val)}</div></div>`;
+    }
+
+    function rcpRoControl(c, p) {
+        const val = rcpCellVal(c.id, p.key);
+        if (val === null || val === undefined) return `<div class="rcp-mini-na">–</div>`;
+        return `<div class="rcp-ro" title="${esc(tr("plugin.ptz.unvalidated", "lecture seule"))}">${esc(fmtVal(val))}</div>`;
+    }
+
+    // ── Interactions du mur RCP ──────────────────────────────
+    function rcpBindWall(body) {
+        body.querySelectorAll(".rcp-pin").forEach((el) =>
+            el.addEventListener("click", () => rcpTogglePin(el.dataset.pin)));
+        body.querySelectorAll(".rcp-val[data-editable]").forEach((el) =>
+            el.addEventListener("click", () => rcpEditValue(el)));
+        body.querySelectorAll(".rcp-knob").forEach((wrap) => {
+            const svg = wrap.querySelector(".rcp-knob-svg");
+            if (svg) {
+                svg.addEventListener("mousedown", (e) => rcpKnobDown(e, wrap));
+                svg.addEventListener("touchstart", (e) => rcpKnobDown(e, wrap), { passive: false });
+            }
+            wrap.addEventListener("wheel", (e) => { e.preventDefault();
+                rcpStep(wrap.dataset.ctlCam, wrap.dataset.ctlKey, e.deltaY < 0 ? 1 : -1, e.altKey || e.shiftKey); }, { passive: false });
+        });
+        body.querySelectorAll(".rcp-stp").forEach((wrap) => {
+            wrap.querySelectorAll(".rcp-sbtn").forEach((b) =>
+                b.addEventListener("click", (e) => rcpStep(wrap.dataset.ctlCam, wrap.dataset.ctlKey, +b.dataset.d, e.altKey || e.shiftKey)));
+            wrap.addEventListener("wheel", (e) => { e.preventDefault();
+                rcpStep(wrap.dataset.ctlCam, wrap.dataset.ctlKey, e.deltaY < 0 ? 1 : -1, e.altKey || e.shiftKey); }, { passive: false });
+            wrap.addEventListener("keydown", (e) => {
+                if (e.key === "ArrowUp") { e.preventDefault(); rcpStep(wrap.dataset.ctlCam, wrap.dataset.ctlKey, 1, e.altKey || e.shiftKey); }
+                else if (e.key === "ArrowDown") { e.preventDefault(); rcpStep(wrap.dataset.ctlCam, wrap.dataset.ctlKey, -1, e.altKey || e.shiftKey); }
+            });
+        });
+        body.querySelectorAll(".rcp-switch").forEach((el) =>
+            el.addEventListener("click", () => {
+                const w = el.closest("[data-ctl-cam]"), dd = rcpData[w.dataset.ctlCam];
+                rcpCommitDiscrete(w.dataset.ctlCam, w.dataset.ctlKey, !(dd.values[w.dataset.ctlKey] === true));
+            }));
+        body.querySelectorAll(".rcp-sel select").forEach((el) =>
+            el.addEventListener("change", () => {
+                const w = el.closest("[data-ctl-cam]");
+                if (!el.value) return;                          // « — »/« non lu » n'écrit rien
+                rcpCommitDiscrete(w.dataset.ctlCam, w.dataset.ctlKey, el.value);
+            }));
+        body.querySelectorAll(".rcp-txt input").forEach((el) =>
+            el.addEventListener("change", () => {
+                const w = el.closest("[data-ctl-cam]");
+                rcpCommitDiscrete(w.dataset.ctlCam, w.dataset.ctlKey, el.value);
+            }));
+    }
+
+    function rcpFindWrap(camId, key) {
+        if (!root) return null;
+        let found = null;
+        root.querySelectorAll(".rcp-console [data-ctl-cam]").forEach((w) => {
+            if (!found && w.dataset.ctlCam === camId && w.dataset.ctlKey === key) found = w;
+        });
+        return found;
+    }
+
+    // Repeint UNE valeur sans reconstruire le DOM : garde vivants le glissement et le focus.
+    function rcpPaintValue(wrap, p, val) {
+        if (!wrap) return;
+        const camId = wrap.dataset.ctlCam, key = wrap.dataset.ctlKey;
+        const base = wrap.classList.contains("mini") ? 12 : 15;
+        const vt = wrap.querySelector(".rcp-val");
+        if (vt) { vt.innerHTML = rcpValInner(p, val); vt.style.fontSize = rcpFont(val, base) + "px"; }
+        const slot = wrap.querySelector(".rcp-delta-slot");
+        if (slot) slot.innerHTML = rcpDeltaBadge(p, camId, key, val);
+        if (wrap.classList.contains("rcp-knob")) {
+            const ang = rcpKnobAng(val, p.min, p.max);
+            const arc = wrap.querySelector(".rcp-arc");
+            if (arc) arc.setAttribute("d", rcpArc(RCP_KA0, ang, RCP_KR));
+            const ptr = wrap.querySelector(".rcp-ptr");
+            if (ptr) {
+                const a = rcpPolar(ang, RCP_KR - 3), b = rcpPolar(ang, 13);
+                ptr.setAttribute("x1", b[0].toFixed(1)); ptr.setAttribute("y1", b[1].toFixed(1));
+                ptr.setAttribute("x2", a[0].toFixed(1)); ptr.setAttribute("y2", a[1].toFixed(1));
+            }
+        }
+    }
+
+    // Saisie clavier au clic sur la valeur : Entrée valide, Échap annule.
+    function rcpEditValue(el) {
+        if (rcpReadonly()) return;                        // mode « Référence » : lecture seule
+        const wrap = el.closest("[data-ctl-cam]");
+        if (!wrap) return;
+        const camId = wrap.dataset.ctlCam, key = wrap.dataset.ctlKey;
+        const dd = rcpData[camId], p = dd && dd.byKey[key];
+        if (!p || !p.writable) return;
+        const cur = dd.values[key];
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.className = "rcp-vedit";
+        inp.value = (cur === null || cur === undefined) ? "" : cur;
+        if (p.min != null) inp.min = p.min;
+        if (p.max != null) inp.max = p.max;
+        if (p.step != null) inp.step = p.step;
+        el.replaceWith(inp); inp.focus(); inp.select();
+        let done = false;
+        const finish = (commit) => {
+            if (done) return; done = true;
+            if (commit) { const nv = parseFloat(inp.value); if (!isNaN(nv)) dd.values[key] = rcpClamp(p, nv); }
+            const val = dd.values[key];
+            const span = document.createElement("span");
+            span.className = "rcp-val"; span.setAttribute("data-editable", "1");
+            span.style.fontSize = rcpFont(val, wrap.classList.contains("mini") ? 12 : 15) + "px";
+            span.innerHTML = rcpValInner(p, val);
+            span.addEventListener("click", () => rcpEditValue(span));
+            inp.replaceWith(span);
+            rcpPaintValue(wrap, p, val);
+            if (commit) rcpWriteNow(camId, key);
+        };
+        inp.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); finish(true); }
+            else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+        });
+        inp.addEventListener("blur", () => finish(true));
+    }
+
+    function rcpSetLive(camId, key, val) {
+        const dd = rcpData[camId];
+        if (!dd) return;
+        dd.values[key] = val;
+        rcpPaintValue(rcpFindWrap(camId, key), dd.byKey[key], val);
+        rcpQueueWrite(camId, key);
+    }
+    function rcpStep(camId, key, dir, big) {
+        if (rcpReadonly()) return;                        // mode « Référence » : lecture seule
+        const dd = rcpData[camId], p = dd && dd.byKey[key];
+        if (!p || !p.writable) return;
+        rcpSetLive(camId, key, rcpStepVal(p, dd.values[key], dir, big));
+    }
+
+    // Glisser vertical du rotatif : les gestionnaires vivent au niveau document (posés au
+    // montage) et lisent `rcpDrag` — repeindre le contrôle ne les casse donc pas.
+    function rcpKnobDown(e, wrap) {
+        if (rcpReadonly()) return;                        // mode « Référence » : lecture seule
+        const camId = wrap.dataset.ctlCam, key = wrap.dataset.ctlKey;
+        const dd = rcpData[camId], p = dd && dd.byKey[key];
+        if (!p || !p.writable) return;
+        const cur = rcpNum(dd.values[key]);
+        rcpDrag = { camId, key, moved: false,
+            startY: (e.touches ? e.touches[0].clientY : e.clientY),
+            startVal: isNaN(cur) ? (p.min != null ? p.min : 0) : cur };
+        rcpDragActive = true;
+        document.body.style.cursor = "ns-resize";
+        if (e.cancelable) e.preventDefault();
+    }
+    function rcpOnDragMove(e) {
+        if (!rcpDrag) return;
+        const dd = rcpData[rcpDrag.camId], p = dd && dd.byKey[rcpDrag.key];
+        if (!p) return;
+        const y = (e.touches ? e.touches[0].clientY : e.clientY);
+        const range = ((p.max != null ? p.max : 100) - (p.min != null ? p.min : 0)) || 100;
+        const v = rcpClamp(p, rcpDrag.startVal + (rcpDrag.startY - y) / 150 * range);
+        if (dd.values[rcpDrag.key] !== v) {
+            rcpDrag.moved = true;
+            dd.values[rcpDrag.key] = v;
+            rcpPaintValue(rcpFindWrap(rcpDrag.camId, rcpDrag.key), p, v);
+        }
+        if (e.cancelable) e.preventDefault();
+    }
+    function rcpOnDragUp() {
+        if (!rcpDrag) return;
+        const camId = rcpDrag.camId, key = rcpDrag.key, moved = rcpDrag.moved;
+        rcpDrag = null; rcpDragActive = false;
+        document.body.style.cursor = "";
+        if (moved) rcpQueueWrite(camId, key);
+        if (rcpRenderPending) { rcpRenderPending = false; renderRcp(); }
+    }
+
+    // ── Écriture (débounce pour rotatifs/steppers, immédiate pour un choix délibéré) ──
+    function rcpQueueWrite(camId, key) {
+        const ck = camId + "|" + key;
+        clearTimeout(rcpTimers[ck]);
+        rcpTimers[ck] = setTimeout(() => { delete rcpTimers[ck]; rcpFlush(camId, key); }, 320);
+    }
+    async function rcpFlush(camId, key) {
+        const dd = rcpData[camId], p = dd && dd.byKey[key];
+        if (!p) return;
+        if (p.heavy && !confirm(tr("plugin.ptz.rcp.heavyConfirm",
+            "Ce réglage fait REDÉMARRER la caméra (~2 min). Continuer ?"))) { await rcpReread(camId); return; }
+        await rcpDoWrite(camId, key, true);
+    }
+    async function rcpWriteNow(camId, key) {          // saisie clavier validée
+        const dd = rcpData[camId], p = dd && dd.byKey[key];
+        if (!p) return;
+        const ck = camId + "|" + key; clearTimeout(rcpTimers[ck]); delete rcpTimers[ck];
+        if (p.heavy && !confirm(tr("plugin.ptz.rcp.heavyConfirm",
+            "Ce réglage fait REDÉMARRER la caméra (~2 min). Continuer ?"))) { await rcpReread(camId); return; }
+        await rcpDoWrite(camId, key, false);
+    }
+    async function rcpCommitDiscrete(camId, key, val) {   // bool / enum / text
+        if (rcpReadonly()) return;                        // mode « Référence » : lecture seule
+        const dd = rcpData[camId], p = dd && dd.byKey[key];
+        if (!p || !p.writable) return;
+        if (p.heavy && !confirm(tr("plugin.ptz.rcp.heavyConfirm",
+            "Ce réglage fait REDÉMARRER la caméra (~2 min). Continuer ?"))) { fillRcpColumn(camId); return; }
+        dd.values[key] = val;
+        fillRcpColumn(camId);                             // reflète tout de suite le choix
+        await rcpDoWrite(camId, key, false);
+    }
+    async function rcpDoWrite(camId, key, silentOk) {
+        const dd = rcpData[camId], p = dd && dd.byKey[key];
+        if (!p || !p.writable) return;
+        const val = dd.values[key];
+        try {
+            const r = await ctx.api("cameras/" + camId + "/params", { body: { values: { [key]: val } } });
+            const rep = (r.report || {})[key] || {};
+            if (rep.ok) { if (!silentOk) toast(tr("plugin.ptz.written", "Paramètre appliqué"), "info"); }
+            else toast(rep.error || tr("plugin.ptz.writeFail", "Écriture refusée"), "error");
+        } catch (e) { toast(e.message, "error"); }
+        await rcpReread(camId);                            // une écriture peut en contraindre d'autres
+    }
+    async function rcpReread(camId) {
+        try {
+            const d = await ctx.api("cameras/" + camId + "/params");
+            rcpData[camId] = rcpColorOf(d); delete rcpErr[camId];
+        } catch (e) { rcpErr[camId] = e.message; }
+        fillRcpColumn(camId);
+    }
+
+    // Rafraîchit les contrôles d'UNE caméra en place (sans reconstruire le mur). Si la
+    // STRUCTURE a changé (un réglage apparu/disparu, un « non lu » devenu lisible), on
+    // reconstruit tout — sinon on repeint valeurs, arcs, interrupteurs et décalages.
+    function fillRcpColumn(camId) {
+        if (!root || rcpDragActive) return;
+        const dd = rcpData[camId];
+        let mismatch = false;
+        root.querySelectorAll(".rcp-console [data-ctl-cam]").forEach((w) => {
+            if (w.dataset.ctlCam !== camId) return;
+            const key = w.dataset.ctlKey, p = dd && dd.byKey[key];
+            if (!p) { mismatch = true; return; }
+            const val = dd.values[key], ptype = w.dataset.ptype;
+            if (ptype === "int") {
+                const hasCtl = !!w.querySelector(".rcp-val");
+                const has = !(val === null || val === undefined);
+                if (has !== hasCtl) { mismatch = true; return; }
+                if (has) rcpPaintValue(w, p, val);
+            } else if (ptype === "bool") {
+                const sw = w.querySelector(".rcp-switch");
+                if (sw) { sw.classList.toggle("on", val === true); sw.setAttribute("aria-checked", val === true); }
+                const cap = w.querySelector(".rcp-cap"); if (cap) cap.innerHTML = rcpModBadge(camId, key, val);
+            } else if (ptype === "enum") {
+                const sel = w.querySelector("select"); if (sel) sel.value = (val === null || val === undefined) ? "" : val;
+                const cap = w.querySelector(".rcp-cap"); if (cap) cap.innerHTML = rcpModBadge(camId, key, val);
+            } else if (ptype === "text") {
+                const inp = w.querySelector("input");
+                if (inp && document.activeElement !== inp) inp.value = (val === null || val === undefined) ? "" : val;
+                const cap = w.querySelector(".rcp-cap"); if (cap) cap.innerHTML = rcpModBadge(camId, key, val);
+            }
+        });
+        if (mismatch) { renderRcp(); return; }
+        updateRcpMeta();
+    }
+
+    // Mémorise l'état courant de TOUS les réglages couleur de TOUTES les caméras lues comme
+    // référence { camId: { key: value } }, avec la date. Les valeurs non lues sont omises :
+    // on ne fige pas une référence sur un « non lu ».
+    async function rcpSetReference() {
+        const list = rcpCams();
+        const ref = {};
+        let n = 0;
+        list.forEach((c) => {
+            const dd = rcpData[c.id];
+            if (!dd) return;
+            const m = {};
+            Object.keys(dd.byKey).forEach((key) => {
+                const v = dd.values[key];
+                if (v !== null && v !== undefined) m[key] = v;
+            });
+            if (Object.keys(m).length) { ref[c.id] = m; n++; }
+        });
+        if (!n) { toast(tr("plugin.ptz.rcp.nothingToRef", "Rien à mémoriser (aucune valeur lue)."), "error"); return; }
+        rcpRef = ref;
+        rcpRefDate = new Date().toISOString();
+        await rcpRefPersist({ date: rcpRefDate, ref });
+        toast(`${tr("plugin.ptz.rcp.refSaved", "Référence mémorisée")} · ${n} ${tr("plugin.ptz.cameras", "caméra(s)")}`, "info");
+        renderRcp();
+    }
+
+    async function rcpClearReference() {
+        if (!rcpRef) return;
+        if (!confirm(tr("plugin.ptz.rcp.clearConfirm", "Effacer la référence colorimétrique ?"))) return;
+        await rcpRefRemove();
+        rcpRef = null; rcpRefDate = null;
+        toast(tr("plugin.ptz.rcp.refCleared", "Référence effacée"), "info");
+        renderRcp();
+    }
+
+    function updateRcpMeta() {
+        const el = $("#ptz-rcp-meta");
+        if (!el) return;
+        const list = rcpCams();
+        const ok = list.filter((c) => rcpData[c.id]).length;
+        const ko = list.filter((c) => rcpErr[c.id]).length;
+        let s = (ok + ko < list.length)
+            ? `${ok + ko}/${list.length} ${tr("plugin.ptz.read", "lue(s)")}…`
+            : `${ok} ${tr("plugin.ptz.read", "lue(s)")}` + (ko ? ` · ${ko} ${tr("plugin.ptz.failed", "échec(s)")}` : "");
+        s += " · " + (rcpRef
+            ? tr("plugin.ptz.rcp.refSet", "référence :") + " " + (rcpRefDate ? fmtDate2(rcpRefDate) : "✓")
+            : tr("plugin.ptz.rcp.noRef", "aucune référence"));
+        el.textContent = s;
+        const clr = $("#ptz-rcp-clearref");
+        if (clr) clr.disabled = !rcpRef;
+        const exp = $("#ptz-rcp-exportcsv");
+        if (exp) exp.disabled = !rcpRef;                  // export réservé quand une référence existe
+    }
+
+    const fmtDate2 = (iso) => { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(); };
+
+    // ── Export CSV de la référence ───────────────────────────
+    // Produit un CSV du SNAPSHOT mémorisé, présenté comme le tableau RCP : 1ʳᵉ colonne =
+    // libellé du réglage, puis une colonne par caméra ; une ligne d'en-tête par section
+    // (groupe) ; une ligne par réglage. La structure lignes/colonnes reprend EXACTEMENT
+    // `rcpBuildGroups` (donc l'ordre affiché). Cellule vide = pas de valeur pour cette caméra.
+    // Séparateur « ; » (usage FR/Excel), BOM UTF-8, valeurs à risque entre guillemets doublés.
+    function rcpCsvCell(s) {
+        s = (s === null || s === undefined) ? "" : String(s);
+        return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }
+    function rcpCsvCamHead(c) {
+        const num = c.cam_number != null ? "N°" + c.cam_number : "";
+        const model = (c.identity && c.identity.model) || c.model || "";
+        return [num, c.name, model].filter(Boolean).join(" ");
+    }
+    // Valeur de référence formatée : enum → libellé de l'option (pas la valeur brute) ; sinon
+    // valeur telle quelle. Renvoie "" si aucune référence pour ce couple (caméra, réglage).
+    function rcpCsvRefFmt(p, v) {
+        if (v === null || v === undefined) return "";
+        if (p && p.type === "enum" && Array.isArray(p.options)) {
+            const o = p.options.find((o) => o.value === v);
+            if (o) return o.label;
+        }
+        return String(v);
+    }
+    // Texte de référence d'une cellule (comme à l'écran) : simple → une valeur ; trio → les
+    // canaux présents côte à côte (« R=12 V=0 B=-3 »), dans l'ordre R·V·B.
+    function rcpCsvRefCell(row, c) {
+        if (row.kind === "triplet") {
+            const dd = rcpData[c.id];
+            if (!dd) return "";
+            const members = Object.keys(dd.byKey).map((k) => dd.byKey[k])
+                .filter((p) => p.triplet === row.triplet && (p.group || "") === row.group);
+            members.sort((a, b) => rcpChanOrder(a.channel) - rcpChanOrder(b.channel));
+            const parts = [];
+            members.forEach((p) => {
+                const v = rcpRefVal(c.id, p.key);
+                if (v === undefined || v === null) return;
+                const L = RCP_CH[p.channel] ? RCP_CH[p.channel].L : (p.channel || "");
+                parts.push((L ? L + "=" : "") + rcpCsvRefFmt(p, v));
+            });
+            return parts.join(" ");
+        }
+        const dd = rcpData[c.id], p = dd && dd.byKey[row.key];
+        return rcpCsvRefFmt(p, rcpRefVal(c.id, row.key));
+    }
+    function rcpExportCsv() {
+        if (!rcpRef) return;
+        const list = rcpCams();
+        const groups = rcpBuildGroups(list);
+        const ncol = list.length;
+        const lines = [];
+        lines.push([rcpCsvCell(tr("plugin.ptz.rcp.setting", "Réglage"))]
+            .concat(list.map((c) => rcpCsvCell(rcpCsvCamHead(c)))).join(";"));
+        groups.forEach((G) => {
+            if (!G.rows.length) return;
+            if (G.name) {                                 // ligne d'en-tête de section
+                const pad = []; for (let i = 0; i < ncol; i++) pad.push("");
+                lines.push([rcpCsvCell(G.name)].concat(pad).join(";"));
+            }
+            G.rows.forEach((row) => {
+                lines.push([rcpCsvCell(row.label)]
+                    .concat(list.map((c) => rcpCsvCell(rcpCsvRefCell(row, c)))).join(";"));
+            });
+        });
+        const d = rcpRefDate ? new Date(rcpRefDate) : new Date();
+        const stamp = isNaN(d) ? "" : d.toISOString().slice(0, 10);
+        const csv = "\uFEFF" + lines.join("\r\n");        // BOM UTF-8 pour Excel
+        try {
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = "rcp-reference-" + stamp + ".csv";
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+            toast(tr("plugin.ptz.rcp.csvExported", "Référence exportée en CSV"), "info");
+        } catch (e) { toast(e.message, "error"); }
     }
 
     // ── Noms des mémoires (matrice) ──────────────────────────

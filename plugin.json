@@ -2,10 +2,11 @@
   "license": "GPL-3.0-or-later",
   "type": "ptz",
   "label": "Caméras tourelles",
-  "version": "0.19.1",
+  "version": "0.26.1",
   "runtime": "docker",
   "ember": true,
-  "description": "Pilotage d'un parc de caméras tourelles (PTZ) multi-marques. Architecture à PILOTES : chaque marque est un module isolé exposant le même contrat (disponibilité, identité, paramètres typés, mémoires). Pilote Panasonic (protocole AW, CGI aw_ptz / aw_cam) opérationnel ; pilote Sony (VISCA over IP) déclaré mais non implémenté. Surveillance de disponibilité en tâche de fond, lecture/écriture des paramètres, RAPPELS GROUPÉS sur plusieurs caméras à la fois (format vidéo…), gestion et renommage des mémoires. VOLET PUPITRE : parc de pupitres AW-RP et édition de leur table d'affectation caméra (pilote panasonic_rp, RP200 rétro-ingénieré en direct). Conteneur Docker isolé.",
+  "store_api": true,
+  "description": "Pilotage d'un parc de caméras tourelles (PTZ) multi-marques. Architecture à PILOTES : chaque marque est un module isolé exposant le même contrat (disponibilité, identité, paramètres typés, mémoires). Pilote Panasonic (protocole AW, CGI aw_ptz / aw_cam) opérationnel ; pilote Sony CGI HTTP (ILME-FR7 validée : identité, 100 mémoires nommées, marche, format) opérationnel, pilote Sony VISCA over IP en réserve. Surveillance de disponibilité en tâche de fond, lecture/écriture des paramètres, RAPPELS GROUPÉS sur plusieurs caméras à la fois (format vidéo…), gestion et renommage des mémoires. VOLET PUPITRE : parc de pupitres AW-RP et édition de leur table d'affectation caméra (pilote panasonic_rp, RP200 rétro-ingénieré en direct). Conteneur Docker isolé.",
   "badge": {
     "label": "PTZ",
     "class": "tool-ptz",
@@ -22,7 +23,7 @@
     "page_css": "page.css"
   },
   "docker": {
-    "image": "bobitool-ptz:0.19.1",
+    "image": "bobitool-ptz:0.26.1",
     "build": true,
     "port": 8080,
     "volume": "/data",

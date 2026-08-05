@@ -37,6 +37,7 @@ génération (formats vidéo) sont explicitement séparées par famille.
 """
 import re
 import threading
+import time
 
 import requests
 from requests.auth import HTTPBasicAuth, HTTPDigestAuth
@@ -492,11 +493,297 @@ class PanasonicAW(PtzDriver):
     def freq_labels(self):
         return FREQS.get(self.family(), FREQS[FAMILY_HE])
 
+    # -- pedestals (paint), par génération ------------------------------------
+    # HE : QTP/QRP/QBP en DÉCIMAL, centrés sur 096 (096 = neutre), pas de vert.
+    # UE : QSJ:0F (maître) et QSG:4C/4D/4E (R/V/B) en HEXA centré sur 0x800 (0 = neutre),
+    #      décodés en direct sur AW-UE160 (ex. maître 7EB = -21). Vérifié via cparam.js
+    #      (cparam_get/set_*Pedestal) puis en lecture sur la caméra.
+    def _peds(self):
+        if self.family() == FAMILY_HE:
+            return ({"ped_master": ("QTP", "OTP:"), "ped_r": ("QRP", "ORP:"),
+                     "ped_b": ("QBP", "OBP:")}, False)
+        return ({"ped_master": ("QSJ:0F", "OSJ:0F:"), "ped_r": ("QSG:4C", "OSG:4C:"),
+                 "ped_g": ("QSG:4D", "OSG:4D:"), "ped_b": ("QSG:4E", "OSG:4E:")}, True)
+
+    def _ped_read(self, key):
+        peds, hx = self._peds()
+        if key not in peds:
+            return None
+        raw = _after(self._cam(peds[key][0]), peds[key][1])
+        if not raw:
+            return None
+        try:
+            return int(raw, 16) - 0x800 if hx else int(raw)
+        except ValueError:
+            return None
+
+    def _ped_write(self, key, value):
+        peds, hx = self._peds()
+        if key not in peds:
+            raise Unsupported(f"pedestal non supporté sur ce modèle : {key}")
+        ocmd = peds[key][1].rstrip(":")
+        v = int(value)
+        if hx:
+            return self._cam("%s:%03X" % (ocmd, (v + 0x800) & 0xFFF))
+        return self._cam("%s:%03d" % (ocmd, max(0, min(999, v))))
+
+    # -- gain maître, par génération -----------------------------------------
+    # HE : QGU/OGU (code brut). UE : QSL:25/OSL:25 en dB (code = dB + 8, vérifié AW-UE160 :
+    # 0x12 → 10 dB, écriture 0-12 dB validée en direct). Encodage 2 hexa.
+    def _gain(self):
+        if self.family() == FAMILY_HE:
+            return ("QGU", "OGU:", 0)
+        return ("QSL:25", "OSL:25:", 8)
+
+    def _gain_read(self):
+        q, pfx, off = self._gain()
+        raw = _after(self._cam(q), pfx)
+        if not raw:
+            return None
+        try:
+            return int(raw, 16) - off
+        except ValueError:
+            return None
+
+    def _gain_write(self, value):
+        q, pfx, off = self._gain()
+        return self._cam("%s:%02X" % (pfx.rstrip(":"), (int(value) + off) & 0xFF))
+
+    # -- knee (UE160) : ÉDITABLE, aller-retour validé en direct ---------------
+    # point : QSA:20 → OSA:20:XX ; valeur = (int(XX,16) + 246) / 4 (ex. 0x72 = 90).
+    # slope : QSA:24 → OSA:24:XX ; valeur = int(XX,16) (ex. 0x46 = 70).
+    # Écriture sur 2 hexa majuscules, bornée à l'octet. Aller-retour 90→95→90 et
+    # 70→80→70 confirmé sur l'AW-UE160 (10.10.11.6), valeurs restaurées.
+    def _knee_read(self, which):
+        query, prefix = ("QSA:20", "OSA:20:") if which == "point" else ("QSA:24", "OSA:24:")
+        raw = _after(self._cam(query), prefix)
+        if not raw:
+            return None
+        try:
+            iv = int(raw, 16)
+        except ValueError:
+            return None
+        return int(round((iv + 246) / 4.0)) if which == "point" else iv
+
+    def _knee_write(self, which, value):
+        v = int(value)
+        if which == "point":
+            code = max(0, min(0xFF, int(round(v * 4 - 246))))
+            return self._cam("OSA:20:%02X" % code)
+        return self._cam("OSA:24:%02X" % max(0, min(0xFF, v)))
+
+    # -- painting (UE160) : ÉDITABLE, DÉPENDANT DU MODE, VÉRIFIÉ PAR RELECTURE ---
+    # Encodages vérifiés en direct sur AW-UE160 (10.10.11.6) :
+    #   température   : 5 hexa de tête, en Kelvin ;
+    #   gains R/B     : centrés sur 0x800 (3 hexa) ;
+    #   gamma noir    : centré sur 0x80 (2 hexa) ;
+    #   niveau détail : centré sur 0x80 (2 hexa) ;
+    #   chroma        : octet brut (2 hexa).
+    #
+    # Certaines commandes DÉPENDENT DU MODE de balance des blancs (QAW / OAW) :
+    #   0=ATW, 2=AWC A, 3=AWC B, 4=3200K, 5=5600K, 9=VAR.
+    #   - gain R/B : AWC A/B → OSJ:4B/4C ; VAR → OSG:39/3A (mêmes encodages) ;
+    #                dans les autres modes, non pilotable ;
+    #   - température : VAR → OSI:20 (éditable) ; AWC A/B → OSJ:4A (RÉSULTAT de l'AWB,
+    #                   lecture seule).
+    # gamma noir et détail ne s'appliquent que si leur mode dédié est actif (gamma manuel,
+    # détail ON) : sinon la caméra ignore l'écriture — le garde-fou relecture le détecte.
+
+    def _wb_mode(self):
+        """Mode balance des blancs courant (entier OAW), ou None si illisible.
+        NE JAMAIS écrire OAW : le mode est réglé au boîtier et un changement distant ne
+        tient pas. On se contente de LIRE le mode pour router les commandes painting."""
+        try:
+            return int(_after(self._cam("QAW"), "OAW:"))
+        except (DriverError, ValueError, TypeError):
+            return None
+
+    def _gain_rb_spec(self, mode):
+        """{clé: (query, prefix)} du gain R/B selon le mode WB, ou None si non pilotable.
+        AWC A/B (2/3) → OSJ:4B/4C ; VAR (9) → OSG:39/3A."""
+        if mode in (2, 3):
+            return {"color_gain_r": ("QSJ:4B", "OSJ:4B:"),
+                    "color_gain_b": ("QSJ:4C", "OSJ:4C:")}
+        if mode == 9:
+            return {"color_gain_r": ("QSG:39", "OSG:39:"),
+                    "color_gain_b": ("QSG:3A", "OSG:3A:")}
+        return None
+
+    def _paint_read(self, key, mode=None):
+        if mode is None:
+            mode = self._wb_mode()
+        if key == "wb_color_temp":
+            # VAR : consigne éditable (OSI:20) ; sinon : résultat de l'AWB (OSJ:4A).
+            query, prefix = (("QSI:20", "OSI:20:") if mode == 9
+                             else ("QSJ:4A", "OSJ:4A:"))
+            raw = _after(self._cam(query), prefix)
+            if not raw:
+                return None
+            try:
+                return int(raw.split(":")[0][:5], 16)
+            except ValueError:
+                return None
+        if key in ("color_gain_r", "color_gain_b"):
+            spec = self._gain_rb_spec(mode)
+            if not spec:
+                return None
+            raw = _after(self._cam(spec[key][0]), spec[key][1])
+            if not raw:
+                return None
+            try:
+                return int(raw, 16) - 0x800
+            except ValueError:
+                return None
+        if key == "chroma_level":
+            raw = _after(self._cam("QSD:B0"), "OSD:B0:")
+            if not raw:
+                return None
+            try:
+                return int(raw, 16)
+            except ValueError:
+                return None
+        spec = {"gamma_black": ("QSI:3D", "OSI:3D:", 0x80),
+                "detail_level": ("QSJ:15", "OSJ:15:", 0x80)}.get(key)
+        if not spec:
+            return None
+        query, prefix, off = spec
+        raw = _after(self._cam(query), prefix)
+        if not raw:
+            return None
+        try:
+            return int(raw, 16) - off
+        except ValueError:
+            return None
+
+    def _paint_write(self, key, value):
+        """Écriture painting UE, DÉPENDANTE DU MODE, avec VÉRIFICATION PAR RELECTURE.
+
+        Envoie la commande adaptée au mode WB courant, laisse passer l'anti-rebond de la
+        caméra (~0.35 s) puis relit : si la caméra a répondu une erreur (ERx) OU si la
+        valeur relue diffère de la consigne, on lève une DriverError explicite. Un réglage
+        gaté (gamma manuel, détail ON, balance manuelle) remonte ainsi une ERREUR claire
+        dans le RCP au lieu d'un faux succès."""
+        v = int(value)
+        mode = self._wb_mode()
+        if key == "wb_color_temp":
+            if mode != 9:
+                raise DriverError("température de couleur éditable uniquement en balance "
+                                  "VAR — dans ce mode elle est le résultat de l'AWB "
+                                  "(lecture seule)")
+            cmd = "OSI:20:%05X:0" % max(0, min(0xFFFFF, v))
+        elif key in ("color_gain_r", "color_gain_b"):
+            spec = self._gain_rb_spec(mode)
+            if not spec:
+                raise DriverError("gain couleur non pilotable dans ce mode de balance des "
+                                  "blancs (nécessite AWC A/B ou VAR)")
+            cmd = "%s%03X" % (spec[key][1], (v + 0x800) & 0xFFF)
+        elif key == "chroma_level":
+            cmd = "OSD:B0:%02X" % (v & 0xFF)
+        elif key == "gamma_black":
+            cmd = "OSI:3D:%02X" % ((v + 0x80) & 0xFF)
+        elif key == "detail_level":
+            cmd = "OSJ:15:%02X" % ((v + 0x80) & 0xFF)
+        else:
+            raise Unsupported(f"painting non inscriptible : {key}")
+        # Jusqu'à trois essais : la caméra a un anti-rebond qui peut ignorer une écriture
+        # trop rapprochée. On ne retourne QUE si la relecture confirme la consigne — donc
+        # jamais de faux succès. Un réglage réellement gaté échoue après les trois essais.
+        res = ""
+        for _ in range(3):
+            try:
+                res = self._cam(cmd)
+            except DriverError:
+                res = ""
+            time.sleep(0.35)
+            if self._paint_read(key, mode=mode) == v:
+                return res
+        raise DriverError("réglage refusé par la caméra — vérifier son mode "
+                          "(ex. gamma manuel, détail ON, balance manuelle)")
+
+    # Clés colorimétriques propres à la famille UE, dans l'ordre de lecture/écriture.
+    _KNEE_KEYS = ("knee_point", "knee_slope")
+    _PAINT_KEYS = ("wb_color_temp", "color_gain_r", "color_gain_b",
+                   "gamma_black", "detail_level", "chroma_level")
+
+    def _ue_color_params(self):
+        """Params colorimétriques UE160 : knee + painting ÉDITABLES, mode-aware.
+
+        La température et le gain R/B DÉPENDENT du mode de balance des blancs courant :
+        en AWC A/B le gain est pilotable mais la température est le résultat de l'AWB
+        (lecture seule) ; en VAR les deux sont éditables. On lit le mode une fois ici pour
+        présenter l'inscriptibilité juste, sans mentir sur ce qui est pilotable."""
+        mode = self._wb_mode()
+        gain_ok = mode in (2, 3, 9)
+        temp_ok = (mode == 9)
+        temp_help = ("QSI:20 / OSI:20 — consigne Kelvin en balance VAR. Aller-retour validé "
+                     "en direct sur AW-UE160." if temp_ok else
+                     "QSJ:4A — température résultant de l'AWB : lecture seule dans ce mode "
+                     "(éditable seulement en balance VAR).")
+        gain_help = ("Gain couleur centré sur 0 (hex 0x800). AWC A/B → OSJ:4B/4C, "
+                     "VAR → OSG:39/3A selon le mode courant. Aller-retour validé sur "
+                     "AW-UE160." if gain_ok else
+                     "Gain couleur non pilotable dans ce mode de balance des blancs "
+                     "(nécessite AWC A/B ou VAR).")
+        return [
+            param("knee_point", "Knee (point)", "int", group="Knee", color=True,
+                  writable=True, bulk=True, validated=True, min=80, max=109, step=1,
+                  order=70, help="QSA:20 / OSA:20 — (code + 246) / 4. Aller-retour "
+                                 "validé en direct sur AW-UE160."),
+            param("knee_slope", "Knee (pente)", "int", group="Knee", color=True,
+                  writable=True, bulk=True, validated=True, min=0, max=99, step=1,
+                  order=71, help="QSA:24 / OSA:24 — code brut. Aller-retour validé "
+                                 "en direct sur AW-UE160."),
+            param("wb_color_temp", "Température de couleur", "int",
+                  group="Balance des blancs", unit="K", color=True, writable=temp_ok,
+                  bulk=temp_ok, validated=True, min=2000, max=15000, step=100,
+                  order=72, help=temp_help),
+            param("color_gain_r", "Gain couleur", "int", group="Balance des blancs",
+                  color=True, writable=gain_ok, bulk=gain_ok, validated=True,
+                  triplet="wbgain", channel="R", min=-200, max=200, step=1, big=10,
+                  order=73, help=gain_help),
+            param("color_gain_b", "Gain couleur", "int", group="Balance des blancs",
+                  color=True, writable=gain_ok, bulk=gain_ok, validated=True,
+                  triplet="wbgain", channel="B", min=-200, max=200, step=1, big=10,
+                  order=74, help=gain_help),
+            param("gamma_black", "Gamma (noir)", "int", group="Gamma", color=True,
+                  writable=True, bulk=True, validated=True, min=-48, max=48, step=1,
+                  order=75, help="QSI:3D / OSI:3D — offset centré sur 0 (hex 0x80). "
+                                 "Nécessite le mode gamma manuel ; sinon l'écriture est "
+                                 "refusée (garde-fou relecture)."),
+            param("detail_level", "Niveau de détail", "int", group="Détail", color=True,
+                  writable=True, bulk=True, validated=True, min=-48, max=48, step=1,
+                  order=76, help="QSJ:15 / OSJ:15 — offset centré sur 0 (hex 0x80). "
+                                 "Nécessite le détail activé ; sinon l'écriture est "
+                                 "refusée (garde-fou relecture)."),
+            param("chroma_level", "Chroma / saturation", "int", group="Matrice/Chroma",
+                  color=True, writable=True, bulk=True, validated=True, min=0, max=255,
+                  step=1, big=10, order=77,
+                  help="QSD:B0 / OSD:B0 — niveau de chroma (octet brut). Indépendant du "
+                       "mode de balance des blancs. Aller-retour validé sur AW-UE160."),
+        ]
+
     def params_schema(self):
         fam = self.family()
         freq = self.freq()
         freqs = self.freq_labels()
         formats = [lbl for _c, lbl in _formats(fam, freq)] if freq else []
+
+        # Pedestals colorimétriques, selon la génération (cf. _peds). HE : brut 096-centré,
+        # 0-192, R/B. UE : signé 0-centré (hex), R/V/B (le vert en plus).
+        peds, hx = self._peds()
+        pmin, pmax = (-150, 150) if hx else (0, 192)
+        phelp = ("OSJ:0F / OSG:4C-4E — hex centré (0 = neutre). Décodé sur AW-UE160." if hx
+                 else "QTP / QRP / QBP — code brut (096 = neutre). Vérifié AW-HE130.")
+        ped_params = [param("ped_master", "Pedestal maître", "int", group="Noir", color=True,
+                            min=pmin, max=pmax, step=1, big=10, bulk=True, validated=True,
+                            order=50, help="Pedestal général. " + phelp)]
+        for ch, pk, lbl, od in (("R", "ped_r", "rouge", 51), ("V", "ped_g", "vert", 52),
+                                ("B", "ped_b", "bleu", 53)):
+            if pk in peds:
+                ped_params.append(param(pk, "Pedestal " + lbl, "int", group="Noir", color=True,
+                                        min=pmin, max=pmax, step=1, big=10, triplet="ped",
+                                        channel=ch, bulk=True, validated=True, order=od,
+                                        help="Pedestal " + lbl + ". " + phelp))
         return [
             param("power", "Alimentation", "bool", group="Général", bulk=True,
                   validated=True, help="Marche / veille (#O). Vérifié sur AW-HE130."),
@@ -509,8 +796,14 @@ class PanasonicAW(PtzDriver):
             # Lecture confirmée, ÉCRITURE inconnue → non inscriptibles. Les valeurs sont
             # les codes bruts de la caméra : la table code → valeur physique (dB, densité,
             # 1/x s) n'est pas établie, et l'inventer donnerait un affichage faux.
-            param("gain", "Gain (code brut)", "text", group="Image", writable=False,
-                  validated=True, help="Lecture QGU. Correspondance code → dB à établir."),
+            param("gain", "Gain", "int", group="Exposition", color=True,
+                  unit=("" if fam == FAMILY_HE else "dB"),
+                  min=(0 if fam == FAMILY_HE else -3), max=(48 if fam == FAMILY_HE else 36),
+                  step=1, big=(6 if fam == FAMILY_HE else 3),
+                  writable=True, bulk=True, validated=True, order=30,
+                  help=("QGU / OGU — code brut (correspondance dB à établir). Vérifié AW-HE130."
+                        if fam == FAMILY_HE else
+                        "QSL:25 / OSL:25 en dB (code = dB + 8). Vérifié AW-UE160.")),
             param("nd_filter", "Filtre ND (code brut)", "text", group="Image", writable=False,
                   validated=True, help="Lecture QFT. Correspondance code → densité à établir."),
             param("shutter", "Obturateur (code brut)", "text", group="Image", writable=False,
@@ -545,6 +838,17 @@ class PanasonicAW(PtzDriver):
                   validated=True, order=10, heavy=True,
                   help="QSE:77 / OSE:77. ATTENTION : la caméra redémarre (~2 min) et le "
                        "format vidéo est réinitialisé."),
+
+            # --- Colorimétrie (paint). Le DÉTAIL (QDT/ODT) est commun HE et UE. Les PEDESTALS
+            #     sont construits par génération dans `ped_params` (HE : R/B 096-centré ;
+            #     UE : R/V/B 0-centré hex), rassemblés avec le « Noir » de la FR7. ---
+            *ped_params,
+            param("detail", "Détail", "bool", group="Détail", color=True,
+                  bulk=True, validated=True, order=60,
+                  help="QDT / ODT — netteté (détail) marche/arrêt. Vérifié AW-HE130."),
+            # Colorimétrie propre à la famille UE : knee éditable + painting en lecture
+            # seule (cf. _ue_color_params). Réservée à la UE, comme les pedestals hex.
+            *(self._ue_color_params() if fam == FAMILY_UE else []),
         ] + [
             # Une ligne de tableau par sortie physique. En LECTURE SEULE : la commande
             # d'écriture est connue (OSJ:xx), mais la liste des formats admissibles dépend
@@ -578,13 +882,25 @@ class PanasonicAW(PtzDriver):
         if "preset_speed" in want:
             out["preset_speed"] = _try(lambda: _int(_after(self._ptz("#UPVS"), "uPVS")))
         if "gain" in want:
-            out["gain"] = _try(lambda: _after(self._cam("QGU"), "OGU:"))
+            out["gain"] = _try(lambda: self._gain_read())
         if "nd_filter" in want:
             out["nd_filter"] = _try(lambda: _after(self._cam("QFT"), "OFT:"))
         if "shutter" in want:
             out["shutter"] = _try(lambda: _after(self._cam("QSH"), "OSH:"))
         if "zoom_pos" in want:
             out["zoom_pos"] = _try(lambda: _after(self._ptz("#GZ"), "gz"))
+        for pk in self._peds()[0]:
+            if pk in want:
+                out[pk] = _try(lambda k=pk: self._ped_read(k))
+        if "detail" in want:
+            out["detail"] = _try(lambda: self._cam("QDT").strip().endswith("1"))
+        if self.family() == FAMILY_UE:
+            for which, pk in (("point", "knee_point"), ("slope", "knee_slope")):
+                if pk in want:
+                    out[pk] = _try(lambda w=which: self._knee_read(w))
+            for pk in self._PAINT_KEYS:
+                if pk in want:
+                    out[pk] = _try(lambda k=pk: self._paint_read(k))
         if "video_freq" in want:
             out["video_freq"] = _try(lambda: self.freq(refresh=True))
         for key, _lbl, query, prefix in OUTPUTS.get(self.family(), []):
@@ -612,6 +928,17 @@ class PanasonicAW(PtzDriver):
     def write_param(self, key, value):
         if key == "power":
             return self.power(bool(value))
+        if key in ("ped_master", "ped_r", "ped_g", "ped_b"):
+            return self._ped_write(key, value)
+        if key == "gain":
+            return self._gain_write(value)
+        if key == "detail":
+            return self._cam("ODT:" + ("1" if value else "0"))
+        if key in ("knee_point", "knee_slope"):
+            return self._knee_write("point" if key == "knee_point" else "slope", value)
+        if key in self._PAINT_KEYS:
+            # Painting UE : écriture mode-aware avec vérification par relecture.
+            return self._paint_write(key, value)
         if key == "auto_focus":
             return self._ptz("#D1" + ("1" if value else "0"))
         if key == "preset_speed":

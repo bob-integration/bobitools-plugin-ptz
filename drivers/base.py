@@ -53,7 +53,8 @@ class Unsupported(DriverError):
 
 def param(key, label, type_, group="Général", options=None, min=None, max=None,
           step=None, unit="", writable=True, bulk=False, validated=True, help="",
-          order=50, heavy=False, output=None):
+          order=50, heavy=False, output=None, color=False,
+          big=None, triplet=None, channel=None):
     """Descripteur d'un paramètre pilotable, tel que consommé par le front.
 
     `bulk`     : le paramètre a du sens en RAPPEL GROUPÉ (appliquer la même valeur à
@@ -77,12 +78,22 @@ def param(key, label, type_, group="Général", options=None, min=None, max=None
                    `"SDI 1"` → réglage de cette sortie-là, une ligne par sortie.
                  L'UI en construit un tableau. Une caméra sans sorties multiples produit
                  simplement un tableau à une ligne — aucun test de modèle nulle part.
+    `color`    : le paramètre est un réglage COLORIMÉTRIQUE (paint : balance des blancs,
+                 noir, gamma, détail, look…). L'onglet RCP rassemble ces paramètres de toutes
+                 les caméras côte à côte ; ils restent aussi visibles dans l'onglet Paramètres.
+    `big`      : pas « rapide » d'un bouton ±/molette (Alt/Maj). À défaut, l'UI prend 10×`step`.
+    `triplet`  : identifiant de REGROUPEMENT des composantes R/V/B d'un même réglage sur une
+                 seule ligne du RCP (ex. `"ped"` pour pedestal rouge + bleu). Les paramètres
+                 partageant un même `triplet` sont rendus côte à côte, colorés par `channel`.
+    `channel`  : composante colorée du triplet — `"R"`, `"G"`/`"V"` ou `"B"`. Fixe la couleur
+                 et l'ordre du mini-contrôle dans la ligne du triplet.
     """
     return {
         "key": key, "label": label, "type": type_, "group": group,
         "options": options or [], "min": min, "max": max, "step": step, "unit": unit,
         "writable": writable, "bulk": bulk, "validated": validated, "help": help,
-        "order": order, "heavy": heavy, "output": output,
+        "order": order, "heavy": heavy, "output": output, "color": color,
+        "big": big, "triplet": triplet, "channel": channel,
     }
 
 

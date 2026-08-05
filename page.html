@@ -25,6 +25,7 @@
     <button class="ptz-view-tab on" data-view="fleet" type="button" data-i18n="plugin.ptz.view.fleet">Parc</button>
     <button class="ptz-view-tab" data-view="presta" type="button" data-i18n="plugin.ptz.presta">Sélection presta</button>
     <button class="ptz-view-tab" data-view="overview" type="button" data-i18n="plugin.ptz.overview">Vue d'ensemble</button>
+    <button class="ptz-view-tab" data-view="rcp" type="button" data-i18n="plugin.ptz.rcp">RCP</button>
     <button class="ptz-view-tab" data-view="names" type="button" data-i18n="plugin.ptz.names">Noms des mémoires</button>
     <button class="ptz-view-tab" data-view="snapshots" type="button" data-i18n="plugin.ptz.snapshots">Sauvegardes</button>
     <button class="ptz-view-tab" data-view="panels" type="button" data-i18n="plugin.ptz.panels">Pupitres</button>
@@ -173,6 +174,46 @@
       <button class="btn" id="ptz-ov-refresh" type="button" title="Actualiser">↻</button>
     </div>
     <div id="ptz-ov-body"></div>
+  </div>
+
+  <!-- ══ Vue : RCP (colorimétrie côte à côte) ═══════════════════ -->
+  <!-- Réglages COLORIMÉTRIQUES de toutes les caméras de la presta, côte à côte : caméras en
+       COLONNES, réglages en LIGNES groupés. Cellules éditables (vrai RCP). Une référence
+       mémorisée fait apparaître le décalage de chaque cellule. Front pur : ne garde que les
+       paramètres où `color === true`, donc les nouveaux réglages apparaissent tout seuls. -->
+  <div class="ptz-view" id="ptz-view-rcp" hidden>
+    <div class="ptz-snap-h">
+      <strong data-i18n="plugin.ptz.rcp.title">RCP — mise en peinture</strong>
+      <span class="ptz-meta" id="ptz-rcp-meta"></span>
+      <span class="ptz-spacer"></span>
+      <span class="rcp-seglbl" data-i18n="plugin.ptz.rcp.control">Contrôle</span>
+      <div class="rcp-seg" id="ptz-rcp-style">
+        <button data-s="knob" type="button" data-i18n="plugin.ptz.rcp.styleKnob">Rotatifs</button>
+        <button data-s="step" type="button" data-i18n="plugin.ptz.rcp.styleStep">Boutons ±</button>
+      </div>
+      <span class="rcp-seglbl" data-i18n="plugin.ptz.rcp.view">Vue</span>
+      <div class="rcp-seg" id="ptz-rcp-view">
+        <button data-v="full" type="button" data-i18n="plugin.ptz.rcp.viewFull">Complète</button>
+        <button data-v="compact" type="button" data-i18n="plugin.ptz.rcp.viewCompact">Compacte</button>
+      </div>
+      <span class="rcp-seglbl" data-i18n="plugin.ptz.rcp.show">Afficher</span>
+      <div class="rcp-seg" id="ptz-rcp-cmp">
+        <button data-m="delta" type="button" data-i18n="plugin.ptz.rcp.showDelta">Écart</button>
+        <button data-m="ref" type="button" data-i18n="plugin.ptz.rcp.showRef">Référence</button>
+      </div>
+      <label class="ptz-selall"><span data-i18n="plugin.ptz.sortBy">Trier</span>
+        <select id="ptz-rcp-sort" class="ptz-sort-sel">
+          <option value="none" data-i18n="plugin.ptz.sort.none">ordre du parc</option>
+          <option value="number" data-i18n="plugin.ptz.sort.number">par numéro</option>
+          <option value="ip" data-i18n="plugin.ptz.sort.ip">par adresse IP</option>
+        </select></label>
+      <button class="btn" id="ptz-rcp-setref" type="button" data-i18n="plugin.ptz.rcp.setRef">Mémoriser la référence</button>
+      <button class="btn" id="ptz-rcp-clearref" type="button" data-i18n="plugin.ptz.rcp.clearRef">Effacer la référence</button>
+      <button class="btn" id="ptz-rcp-exportcsv" type="button" data-i18n="plugin.ptz.rcp.exportCsv">Exporter CSV</button>
+      <button class="btn" id="ptz-rcp-refresh" type="button" title="Actualiser">↻</button>
+    </div>
+    <p class="ptz-meta ptz-rcp-help" data-i18n="plugin.ptz.rcp.help">Réglages colorimétriques de toutes les caméras de la presta, côte à côte. Modifiez une cellule pour l'appliquer en direct. « Mémoriser la référence » enregistre les valeurs courantes ; chaque cellule affiche alors son décalage.</p>
+    <div id="ptz-rcp-body"></div>
   </div>
 
   <!-- ══ Vue : Noms des mémoires (mémoires en COLONNES, caméras en LIGNES) ══ -->

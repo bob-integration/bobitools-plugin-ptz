@@ -296,3 +296,138 @@
 .ptz-sb-full .ptz-sb-grid { margin: 0; width: 100%; max-width: min(96vw, 96vh); }
 .ptz-sb-full .ptz-sb-cell { font-size: 22px; }
 .ptz-sb-exitbtn { position: fixed; top: 14px; right: 14px; z-index: 10000; font-size: 16px; }
+
+/* ── Vue RCP (pupitre colorimétrie) ───────────────────────────── */
+/* Vrai pupitre RCP : panneau sombre AUTONOME (un plan de travail d'équipement, pas un
+   tableau) — il assume son propre thème sombre quel que soit le thème de l'app. Contrôles
+   rotatifs (arc ambre, glisser/molette) ou steppers verticaux (+ au-dessus, − dessous),
+   R/V/B côte à côte, référence + décalage. Tout est préfixé .rcp-*. */
+.ptz-rcp-help { margin: 0; }
+
+/* Segmented (Contrôle / Vue) — dans la barre thémée, lisible clair comme sombre. */
+.rcp-seglbl { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+.rcp-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-small); overflow: hidden; }
+.rcp-seg button { appearance: none; border: 0; background: var(--bg-elev); color: var(--text-muted);
+  font: inherit; font-size: 12.5px; padding: 6px 12px; cursor: pointer; transition: background .12s, color .12s; }
+.rcp-seg button + button { border-left: 1px solid var(--border); }
+.rcp-seg button:hover { color: var(--text); }
+.rcp-seg button.on { background: var(--accent-soft); color: var(--text-strong); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* Le pupitre : panneau sombre autonome, avec ses propres variables. */
+.rcp-console {
+  --rcp-panel: #1b1e25; --rcp-panel2: #22262f; --rcp-edge: #2f353f; --rcp-edge2: #3a414d;
+  --rcp-ink: #e8ebf1; --rcp-muted: #8992a1; --rcp-faint: #5b6472;
+  --rcp-amber: #f2a73c; --rcp-amber-dim: rgba(242,167,60,.22);
+  --rcp-green: #4ec97e; --rcp-pos: #4bb6ff; --rcp-neg: #ff7a9c; --rcp-strip: #191c22;
+  --rcp-cR: #ff6b6b; --rcp-cV: #5fd06e; --rcp-cB: #5aa9ff;
+  --rcp-hub-out: #0f1216; --rcp-hub-in: #20242c;
+  border: 1px solid var(--rcp-edge); border-radius: 14px; overflow: auto; max-height: 76vh;
+  background: linear-gradient(180deg, #171a20, #141116 260%); color: var(--rcp-ink);
+  box-shadow: 0 10px 34px rgba(0,0,0,.35);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased;
+}
+.rcp-grid { display: block; }
+.rcp-row { display: grid; grid-template-columns: var(--rcp-cols); align-items: stretch; }
+
+/* Mode « Référence » : on consulte la cible mémorisée, on ne pilote pas. Les contrôles
+   gardent leur format mais deviennent inertes (curseur neutre, pas d'ouverture de menu/saisie). */
+.rcp-refmode .rcp-knob-svg { cursor: default; }
+.rcp-refmode .rcp-knob, .rcp-refmode .rcp-stp, .rcp-refmode .rcp-switch, .rcp-refmode .rcp-val { cursor: default; }
+.rcp-refmode .rcp-sel select, .rcp-refmode .rcp-tin, .rcp-refmode .rcp-sbtn, .rcp-refmode .rcp-switch { pointer-events: none; }
+
+/* En-tête caméras : figé en haut. */
+.rcp-heads { position: sticky; top: 0; z-index: 5; }
+.rcp-heads .rcp-rail, .rcp-chan { border-bottom: 1px solid var(--rcp-edge); }
+.rcp-rail { position: sticky; left: 0; z-index: 3; padding: 9px 12px; display: flex; align-items: center;
+  gap: 8px; background: var(--rcp-panel); border-right: 1px solid var(--rcp-edge); }
+.rcp-heads .rcp-rail { z-index: 6; }
+.rcp-railk { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--rcp-faint); }
+.rcp-chan { padding: 9px 8px; border-left: 1px solid var(--rcp-edge); display: flex; flex-direction: column;
+  gap: 1px; align-items: center; text-align: center; background: var(--rcp-strip); }
+.rcp-chan .rcp-no { font-size: 11px; letter-spacing: .08em; color: var(--rcp-amber); font-weight: 700;
+  display: inline-flex; align-items: center; gap: 5px; }
+.rcp-chan .rcp-nm { font-size: 13px; font-weight: 600; }
+.rcp-chan .rcp-md { font-size: 11px; color: var(--rcp-muted); }
+.rcp-chan.err .rcp-nm { color: var(--rcp-neg); }
+.rcp-chan .ptz-dot { width: 8px; height: 8px; }
+
+/* En-tête de groupe : bandeau par bloc de réglages, figé à gauche. */
+.rcp-grouphead { grid-column: 1 / -1; position: sticky; left: 0; padding: 5px 14px; background: #151820;
+  border-top: 1px solid var(--rcp-edge); border-bottom: 1px solid var(--rcp-edge);
+  font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--rcp-muted); }
+
+.rcp-setrow .rcp-rail { font-size: 12.5px; color: var(--rcp-ink); border-bottom: 1px solid rgba(255,255,255,.03); }
+.rcp-pin { width: 20px; height: 20px; flex: 0 0 auto; border: 0; background: transparent; cursor: pointer;
+  color: var(--rcp-faint); font-size: 15px; line-height: 1; padding: 0; }
+.rcp-pin.on { color: var(--rcp-amber); text-shadow: 0 0 8px rgba(242,167,60,.5); }
+.rcp-rlabel { flex: 1; }
+
+.rcp-cell { border-left: 1px solid var(--rcp-edge); border-bottom: 1px solid rgba(255,255,255,.03);
+  display: flex; align-items: center; justify-content: center; padding: 10px 6px; min-height: 92px;
+  background: linear-gradient(180deg, rgba(255,255,255,.012), transparent); }
+.rcp-cell.rcp-na { color: var(--rcp-faint); font-size: 18px; }
+.rcp-cell.rcp-loading { color: var(--rcp-faint); font-style: italic; }
+.rcp-triplet { display: flex; gap: 12px; align-items: flex-start; justify-content: center; }
+.rcp-mini-na { color: var(--rcp-faint); font-size: 15px; padding: 0 6px; }
+
+/* Rotatif */
+.rcp-knob { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  user-select: none; touch-action: none; }
+.rcp-knob-svg { display: block; cursor: ns-resize; filter: drop-shadow(0 3px 5px rgba(0,0,0,.4)); }
+.rcp-valwrap { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center;
+  justify-content: center; height: var(--rcp-dh); pointer-events: none; }
+.rcp-val { cursor: text; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1;
+  text-align: center; min-width: 26px; padding: 2px 3px; border-radius: 5px; pointer-events: auto; }
+.rcp-val:hover { background: rgba(255,255,255,.08); }
+.rcp-u { font-size: 8px; color: var(--rcp-muted); font-weight: 600; margin-left: 1px; }
+.rcp-vedit { width: 54px; text-align: center; font: inherit; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: #0c0e12; color: #fff; border: 1px solid var(--rcp-amber); border-radius: 5px; padding: 2px; }
+.rcp-vedit:focus { outline: none; }
+.rcp-cap { font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--rcp-muted); font-weight: 600; }
+
+.rcp-delta-slot { position: absolute; top: -7px; left: 50%; transform: translateX(-50%); z-index: 2; }
+.rcp-delta { font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 1px 6px;
+  border-radius: 20px; background: #0d0f13; border: 1px solid var(--rcp-edge2); color: var(--rcp-faint); white-space: nowrap; }
+.rcp-delta.pos { color: var(--rcp-pos); border-color: rgba(75,182,255,.4); }
+.rcp-delta.neg { color: var(--rcp-neg); border-color: rgba(255,122,156,.4); }
+.rcp-delta.zero { color: var(--rcp-green); border-color: rgba(78,201,126,.4); }
+
+/* Stepper vertical */
+.rcp-stp { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  --c: var(--rcp-amber); outline: none; }
+.rcp-stp:focus-visible { box-shadow: 0 0 0 2px var(--rcp-amber-dim); border-radius: 8px; }
+.rcp-stp .rcp-delta-slot { top: -9px; }
+.rcp-sbtn { width: 40px; height: 22px; border-radius: 7px; border: 1px solid var(--rcp-edge2); background: #20242c;
+  color: var(--rcp-ink); font: inherit; font-size: 16px; font-weight: 700; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: .1s; }
+.rcp-stp.mini .rcp-sbtn { width: 34px; height: 20px; font-size: 14px; }
+.rcp-sbtn:hover { border-color: var(--c); color: #fff; }
+.rcp-sbtn:active { background: var(--c); color: #151515; border-color: var(--c); }
+.rcp-stp .rcp-val { color: var(--c); font-size: 15px; margin: 1px 0; }
+.rcp-stp.mini .rcp-val { font-size: 12px; }
+.rcp-stp .rcp-cap { color: var(--c); opacity: .85; }
+
+/* Interrupteur (bool) */
+.rcp-tgl { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.rcp-switch { width: 50px; height: 27px; border-radius: 16px; background: #20242c; border: 1px solid var(--rcp-edge2);
+  position: relative; cursor: pointer; transition: .15s; }
+.rcp-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 21px; height: 21px;
+  border-radius: 50%; background: var(--rcp-faint); transition: .15s; }
+.rcp-switch.on { background: var(--rcp-amber-dim); border-color: var(--rcp-amber); }
+.rcp-switch.on::after { left: 25px; background: var(--rcp-amber); box-shadow: 0 0 10px var(--rcp-amber); }
+
+/* Sélecteur (enum) + lecture seule (text non éditable) */
+.rcp-sel, .rcp-txt { display: flex; flex-direction: column; align-items: center; gap: 7px; width: 100%; }
+.rcp-sel select { appearance: none; background: #0f1216; color: var(--rcp-ink); border: 1px solid var(--rcp-edge2);
+  border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 12px; max-width: 100%; text-align: center; cursor: pointer; }
+.rcp-sel select:focus { outline: none; border-color: var(--rcp-amber); }
+.rcp-tin { width: 100%; box-sizing: border-box; background: #0f1216; color: var(--rcp-ink);
+  border: 1px solid var(--rcp-edge2); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 12px; text-align: center; }
+.rcp-tin:focus { outline: none; border-color: var(--rcp-amber); }
+.rcp-ro { color: var(--rcp-ink); font-size: 13px; font-weight: 600; }
+
+/* Pastille « modifié / = » pour enum, bool, text. */
+.rcp-mod { display: inline-block; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 20px;
+  border: 1px solid var(--rcp-edge2); color: var(--rcp-faint); }
+.rcp-mod.on { color: var(--rcp-pos); border-color: rgba(75,182,255,.4); text-transform: uppercase; letter-spacing: .04em; }
+.rcp-mod.zero { color: var(--rcp-green); border-color: rgba(78,201,126,.4); }

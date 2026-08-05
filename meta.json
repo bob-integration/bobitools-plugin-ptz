@@ -1,6 +1,76 @@
 {
   "changelog": [
     {
+      "version": "0.26.1",
+      "date": "2026-08-05",
+      "notes": "RCP, deux ajouts. EXPORT CSV : quand une référence est mémorisée, un bouton « Exporter CSV » télécharge un tableau mis en page comme le RCP (caméras en colonnes, réglages en lignes groupées, trios R·V·B sur une ligne), séparateur « ; » et BOM UTF-8 pour Excel FR. BASCULE D'AFFICHAGE : nouveau sélecteur « Écart » / « Référence » dans l'en-tête — « Écart » = valeur courante + décalage vs référence (comportement habituel) ; « Référence » = affiche les valeurs de référence mémorisées (la cible), en lecture seule. Choix mémorisé par poste."
+    },
+    {
+      "version": "0.26.0",
+      "date": "2026-08-05",
+      "notes": "Painting AW-UE160 ÉDITABLE (débloqué grâce à la doc d'interface AW officielle + tests propres). Le déclic : ne pas forcer le mode balance des blancs à distance (ne tient pas), mais utiliser les commandes DU MODE COURANT de la caméra. Deviennent éditables : gains couleur Rouge/Bleu, gamma noir, niveau de détail, et chroma/saturation (nouveau) ; température de couleur éditable en mode VAR (lecture seule en AWB, où elle est le résultat de la balance). Commandes choisies selon le mode WB lu sur la caméra (jamais modifié). Garde-fou par RELECTURE : chaque écriture est relue ; si la caméra l'ignore (réglage dont le mode fonction n'est pas actif, ex. gamma manuel / détail ON), l'outil remonte « réglage refusé — vérifier le mode caméra » au lieu d'un faux succès. Validé en direct (aller-retours restaurés). La capture d'un pupitre RP n'a finalement pas été nécessaire."
+    },
+    {
+      "version": "0.25.0",
+      "date": "2026-08-04",
+      "notes": "RCP enrichi (validé en direct). AW-UE160 : KNEE (point + pente) éditable ; température/gains couleur R·B/gamma noir/niveau de détail exposés en LECTURE SEULE (l'écriture painting est bloquée en pilotage distant sur cette caméra — voir ci-dessous). ILME-FR7 : EXPOSITION — iris éditable (ExposureIris, aligné au cran de diaph le plus proche), obturateur éditable (mode vitesse/angle/ECS + angle) ; filtre ND en lecture seule (piloté par le sélecteur physique sur cette FR7). Bilan RCP : la FR7 est très complète (balance des blancs, noir, gains, base look, iris, obturateur, gain, base ISO) ; les Panasonic exposent gain, pedestals, détail, et knee (UE160). Doc d'interface AW officielle récupérée (UE150/HE145) → commandes painting exactes en réserve pour débloquer l'écriture UE160 dès qu'on aura la séquence (capture d'un pupitre RP)."
+    },
+    {
+      "version": "0.24.1",
+      "date": "2026-08-04",
+      "notes": "RCP — lot « Gains » (1er lot d'enrichissement). Gain maître éditable sur les trois caméras : FR7 (imaging.cgi?ExposureGain), AW-HE130 (QGU/OGU, code brut), AW-UE160 (QSL:25/OSL:25 en dB, code = dB+8, aller-retour 0-12 dB validé). Correctif : les valeurs numériques de la FR7 (température, teinte, gains, noir) étaient renvoyées en texte — converties en entiers pour que boutons et décalage du RCP fonctionnent. À noter : les gains de balance des blancs R/V/B de la UE160 (et divers réglages paint) sont VERROUILLÉS tant que la caméra n'est pas en mode manuel adéquat — prochains lots (gamma/knee, détail/chroma, gains BdB) à valider caméra en mode manuel."
+    },
+    {
+      "version": "0.24.0",
+      "date": "2026-08-04",
+      "notes": "Onglet RCP au look pupitre. Bascule « Contrôle » Rotatifs / Boutons ± (au choix) : boutons rotatifs (glisser/molette) OU steppers verticaux (+ au-dessus, − en dessous). Raccourcis : clic = petit pas, Alt/Maj + clic = grand pas, flèches ↑/↓, molette ; clic sur la valeur = saisie clavier (valeurs longues gérées). Les composantes R/V/B d'un même réglage tiennent sur UNE ligne (mini-boutons colorés rouge/vert/bleu), le maître au-dessus. Deux vues : Complète (avec ★ pour épingler) et Compacte (seulement les épinglés, sans défiler) — épingles et référence partagées entre postes. Référence + décalage par réglage conservés. Cellules éditables (écriture temporisée pendant le réglage, confirmation pour les réglages lourds, lecture seule respectée)."
+    },
+    {
+      "version": "0.23.1",
+      "date": "2026-08-04",
+      "notes": "Colorimétrie AW-UE160 : pedestals maître + Rouge/Vert/Bleu, éditables (validés en direct, aller-retour d'écriture). Le codage diffère de l'AW-HE130 (hexadécimal centré, décodé depuis la caméra) — les pedestals sont désormais gérés par génération. Ajout des métadonnées de regroupement R/V/B (triplet/channel) et des bornes des contrôles sur tous les réglages couleur, pour l'onglet RCP (rotatifs / boutons ±). La UE160 n'a pas de « base ISO » double comme la FR7 (réglage « Shooting Mode » candidat, à confirmer)."
+    },
+    {
+      "version": "0.23.0",
+      "date": "2026-08-04",
+      "notes": "Nouvel onglet RCP (colorimétrie côte à côte). Les caméras s'affichent en colonnes, les réglages couleur en lignes groupées (balance des blancs, noir, look, détail…), toutes marques mélangées (union ; case vide si une caméra n'a pas un réglage). Cellules ÉDITABLES (vrai RCP). Bouton « Mémoriser la référence » : capture tous les réglages couleur, puis chaque cellule affiche le DÉCALAGE vs la référence (delta signé pour les valeurs numériques, pastille « modifié » pour les listes). Référence partagée via le store de l'outil (store_api activé) avec repli localStorage. Côté Panasonic AW : pedestals maître/rouge/bleu + détail exposés et validés sur AW-HE130 (les pedestals UE160 se codent différemment — non exposés pour l'instant, seul le détail est commun). Correctif : les caméras Panasonic sont identifiées pour connaître leur génération (HE vs UE) et n'exposer que les réglages réellement supportés."
+    },
+    {
+      "version": "0.22.0",
+      "date": "2026-08-04",
+      "notes": "Colorimétrie FR7 (étape 1 du futur onglet RCP) + switch base ISO. Nouveau marqueur 'color' sur les paramètres (pour l'onglet RCP à venir). La FR7 expose désormais, éditables : balance des blancs (mode, température K, teinte, gains Cb/Cr — imaging.cgi), noir maître/rouge/bleu (paint.cgi), Base Look/LUT (baselook.cgi, liste décodée depuis la caméra), et un switch BASE ISO basse/haute (imaging.cgi?ExposureBaseSensitivity, demandé par le testeur). Lecture/écriture validées en direct. À venir : mêmes réglages côté Panasonic AW (rétro-ingénierie de la page couleur + base ISO UE160), puis l'onglet RCP côte à côte avec mémorisation d'une référence et affichage du décalage."
+    },
+    {
+      "version": "0.21.2",
+      "date": "2026-08-04",
+      "notes": "FR7 : la Vue d'ensemble affiche enfin ses infos (retour testeur). Le pilote Sony expose désormais ce que la vue transverse attend — la fréquence (via freq_labels) et deux « sorties » logiques : Format général (résolution d'enregistrement) et Sortie SDI/HDMI. La FR7 remplit donc les colonnes Fréquence / Format général / Sortie comme les Panasonic. Libellés de sortie affinés (niveaux 3G-SDI LVA/LVB distingués)."
+    },
+    {
+      "version": "0.21.1",
+      "date": "2026-08-04",
+      "notes": "FR7 : masquage des options Rec Format invalides + réordonnancement (retour testeur). Les options impossibles sont désormais MASQUÉES selon l'état courant, avec la logique EXTRAITE du JS de la caméra (pas devinée) : à 24 Hz le Super35 et le XAVC-L disparaissent ; le RAW / RAW+XAVC-I n'apparaît qu'en Cine EI et capteur plein format. La liste des résolutions et des sorties SDI/HDMI reste fournie par la caméra. Le groupe « Enregistrement » passe AVANT le groupe « Sortie » (la sortie dépend du Rec Format). Après chaque écriture de paramètre, l'onglet recharge le schéma pour recalculer le masquage et les listes dépendantes."
+    },
+    {
+      "version": "0.21.0",
+      "date": "2026-08-04",
+      "notes": "FR7 : réglages « Rec Format » ÉDITABLES (demande testeur). Quatre paramètres modifiables — Fréquence, Mode de capteur (Plein format FF / Super35 S35), Codec (XAVC-I / XAVC-L / RAW / RAW+XAVC-I) et Résolution d'enregistrement — écrits via project.cgi puis appliqués par SendProjectAndReload (la CAMÉRA SE RECHARGE, ~30 s, réglages marqués « lourds »). Ces réglages sont interdépendants et filtrés par la caméra ; on propose les valeurs candidates et la caméra refuse elle-même les combinaisons invalides (pas de recopie fragile du graphe de contraintes). La liste des résolutions est fournie dynamiquement par la caméra, et la liste des sorties SDI/HDMI s'élargit selon le Rec Format choisi — c'est ce qui débloque « l'étendue des formats ». Mécanique d'écriture validée en direct (aller-retour résolution 1920x1080p/4096x2160p et codec XAVC-I/XAVC-L). L'ancien affichage lecture seule du format d'enregistrement est remplacé par ces réglages éditables."
+    },
+    {
+      "version": "0.20.2",
+      "date": "2026-08-04",
+      "notes": "FR7, 2e tour de retours testeur. ALIMENTATION : la mise en MARCHE (réveil) est réparée — 'main.cgi?System=on' répond 400 si on l'envoie pendant la transition juste après une veille, et le réveil de l'imageur est lent (~30-60 s) ; le pilote réessaie le 400 transitoire et le message UI indique désormais « Réveil en cours… ». SYNCHRO : l'interrupteur d'alimentation en double dans les Paramètres est SUPPRIMÉ (il n'était pas synchro avec les boutons Marche/Veille) ; l'alimentation ne se pilote plus que par les boutons Marche/Veille. SORTIES SDI/HDMI éditables : nouveau paramètre 'Sortie SDI / HDMI' (enum), lu et écrit via monitoring.cgi?MonitoringOutputFormat, options fournies par la caméra (SDI et HDMI sont couplés, ex. « SDI 1920 PsF / HDMI 1920i ») — changement validé et réversible sur la FR7. Le format d'enregistrement reste affiché en lecture seule. La suppression de mémoire n'a pas de bouton (l'enregistrement écrase déjà l'ancienne), la commande PresetClear reste disponible côté pilote."
+    },
+    {
+      "version": "0.20.1",
+      "date": "2026-08-04",
+      "notes": "Corrections FR7 (retour testeur). MISE EN VEILLE réparée : la commande n'est pas 'system.cgi?Power=on/off' (qui répond 204 mais n'agit pas) mais 'main.cgi?System=on|standby' — le bouton de veille fonctionne désormais. CRÉATION DE MÉMOIRE réparée : Sony exige 'PresetSet=<n>,<nom>,on' (le simple 'PresetSet=<n>' renvoyait 400) ; l'enregistrement reprend le nom existant s'il y en a un, sinon 'Preset<n>', pour ne pas l'écraser. Ajout de la SUPPRESSION de mémoire ('PresetClear=<n>'). Format vidéo affiché sous forme lisible '3840x2160p / 25' (inq=project RecFormatVideoFormat + fréquence) au lieu du code interne '2160p_2997'. Toutes ces commandes vérifiées en direct sur la FR7."
+    },
+    {
+      "version": "0.20.0",
+      "date": "2026-08-04",
+      "notes": "Pilote SONY CGI HTTP (nouveau, 'sony_cgi'), VALIDÉ sur une ILME-FR7 réelle. Les tourelles Sony récentes (ILME-FR7, série SRG-A/X, BRC-X) se pilotent entièrement en HTTP via l'API CGI 'command'/'inquiry' — pas besoin de VISCA. Vérifié en direct : identité (modèle, série, firmware, MAC, nom), 100 mémoires avec leurs NOMS stockés dans la caméra, marche/veille, renommage de mémoire, lecture du format vidéo et de l'objectif, console CGI. Auth Digest (la FR7 l'exige pour les endpoints privilégiés ; le Basic ne passe que sur system/camera). Rappel/enregistrement de mémoire = commandes CGI standard, à confirmer en direct au premier feu vert (elles bougent la caméra). Le pilote 'sony_visca' (VISCA over IP) reste en réserve pour les caméras réellement pilotées en VISCA."
+    },
+    {
       "version": "0.19.0",
       "date": "2026-07-31",
       "notes": "Caméras GÉNÉRIQUES (pilote 'generic') : pour les caméras d'une presta qui ne sont pas des Panasonic AW, une simple fiche (nom, adresse, numéro) sans aucune commande, juste pour la vue globale — joignabilité par test TCP, aucun onglet de contrôle. Le type réel sera implémenté plus tard. Ajout d'une capacité CAP_NETWORK : le bouton « Changer l'IP » ne s'affiche que pour les caméras qui le supportent (les AW)."
