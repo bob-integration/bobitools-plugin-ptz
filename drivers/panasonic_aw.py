@@ -739,11 +739,11 @@ class PanasonicAW(PtzDriver):
                   order=72, help=temp_help),
             param("color_gain_r", "Gain couleur", "int", group="Balance des blancs",
                   color=True, writable=gain_ok, bulk=gain_ok, validated=True,
-                  triplet="wbgain", channel="R", min=-200, max=200, step=1, big=10,
+                  triplet="wbgain", channel="R", role="white", min=-200, max=200, step=1, big=10,
                   order=73, help=gain_help),
             param("color_gain_b", "Gain couleur", "int", group="Balance des blancs",
                   color=True, writable=gain_ok, bulk=gain_ok, validated=True,
-                  triplet="wbgain", channel="B", min=-200, max=200, step=1, big=10,
+                  triplet="wbgain", channel="B", role="white", min=-200, max=200, step=1, big=10,
                   order=74, help=gain_help),
             param("gamma_black", "Gamma (noir)", "int", group="Gamma", color=True,
                   writable=True, bulk=True, validated=True, min=-48, max=48, step=1,
@@ -775,15 +775,15 @@ class PanasonicAW(PtzDriver):
         phelp = ("OSJ:0F / OSG:4C-4E — hex centré (0 = neutre). Décodé sur AW-UE160." if hx
                  else "QTP / QRP / QBP — code brut (096 = neutre). Vérifié AW-HE130.")
         ped_params = [param("ped_master", "Pedestal maître", "int", group="Noir", color=True,
-                            min=pmin, max=pmax, step=1, big=10, bulk=True, validated=True,
-                            order=50, help="Pedestal général. " + phelp)]
+                            role="mblack", min=pmin, max=pmax, step=1, big=10, bulk=True,
+                            validated=True, order=50, help="Pedestal général. " + phelp)]
         for ch, pk, lbl, od in (("R", "ped_r", "rouge", 51), ("V", "ped_g", "vert", 52),
                                 ("B", "ped_b", "bleu", 53)):
             if pk in peds:
                 ped_params.append(param(pk, "Pedestal " + lbl, "int", group="Noir", color=True,
                                         min=pmin, max=pmax, step=1, big=10, triplet="ped",
-                                        channel=ch, bulk=True, validated=True, order=od,
-                                        help="Pedestal " + lbl + ". " + phelp))
+                                        channel=ch, role="black", bulk=True, validated=True,
+                                        order=od, help="Pedestal " + lbl + ". " + phelp))
         return [
             param("power", "Alimentation", "bool", group="Général", bulk=True,
                   validated=True, help="Marche / veille (#O). Vérifié sur AW-HE130."),

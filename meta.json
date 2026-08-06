@@ -1,6 +1,31 @@
 {
   "changelog": [
     {
+      "version": "0.31.0",
+      "date": "2026-08-06",
+      "notes": "Pilote CCU Sony (sony_ccu) opérationnel — paint colorimétrique d'une caméra système Sony via sa CCU en protocole 700/CNS (TCP 7700), VALIDÉ EN DIRECT sur HSCU-1700 (changement de couleur visible à l'écran). Protocole reconstitué par capture MITM d'un vrai RCP : handshake avec ACK marqué (02 02 00) et id PARTAGÉ handshake↔premier message (sinon la CCU rejette tout), puis RITUEL de connexion (ScanCameraStatus + interrogation des groupes CHU) qui établit le lien tête caméra — sans quoi le paint est accepté mais pas appliqué. Écriture analogique en 16 bits (groupe ABS 0x23), lecture via le cache poussé par la tête caméra. Réglages exposés dans l'onglet RCP par rôle (diaph, noirs, blancs, gamma, knee, matrice…). Sources rétro-ingénierie créditées : Oleksandr Nazaruk / Freehand (SONY.PTP700.SPP)."
+    },
+    {
+      "version": "0.30.0",
+      "date": "2026-08-05",
+      "notes": "Onglet RCP au look PUPITRE (style Sony RCP-3500). Chaque caméra devient une « tranche » verticale : ÉCRAN paginé en haut (catégories en onglets courts multi-lignes + ★ Favoris), zones permanentes BLANCS (gains R/V/B) et NOIRS (R/V/B), puis DIAPH (levier vertical par défaut ou bouton rotatif, affiché en F-stop) et PEDESTAL (molette par défaut ou bouton). Le placement est piloté par le RÔLE des paramètres (générique, pas par marque). Favoris : une étoile ★ sur chaque réglage pour l'épingler ; l'onglet Favoris regroupe les réglages choisis, partagés entre postes. Conservés : référence + décalage (liseré sur diaph/pedestal quand ils s'écartent de la référence), bascule Écart/Référence, export CSV, vue compacte (diaph + pedestal seuls pour piloter beaucoup de caméras). À revalider en direct dès le retour réseau des caméras."
+    },
+    {
+      "version": "0.29.0",
+      "date": "2026-08-05",
+      "notes": "Préparation du look RCP (style pupitre RCP-3500) : ajout d'un RÔLE aux paramètres (iris/diaphragme, master black/pedestal, blancs R·B, noirs R·B) — chaque driver déclare le rôle de ses réglages, l'UI les place au bon endroit sans rien coder en dur par marque. Rôles posés : FR7 (iris, blancs Cr·Cb, noir maître, noirs R·B), UE160 (master black, noirs R·V·B, blancs R·B), HE130 (master black, noirs R·B). La refonte de l'onglet RCP au look pupitre suit."
+    },
+    {
+      "version": "0.28.0",
+      "date": "2026-08-05",
+      "notes": "Driver Sony CCU (protocole 700/CNS, TCP:7700) PRÉPARÉ — non validé (AVAILABLE=false), en attente d'un accès au réseau CNS pour confirmation en direct. Portage Python fidèle de la bibliothèque de rétro-ingénierie d'Oleksandr Nazaruk / Freehand (GPL v3, crédité en tête du module) : moteur de connexion persistante + heartbeat, trames handshake / Request-Response / Notify (tally), adressage multi-CCU (MCS, champ ccu_number). Carte des commandes paint (noir maître + R/G/B, flare, chroma, ATW, gain maître, ND…) portée depuis les sources. Auto-test de trame hors ligne 21/21 (handshake et paquets conformes aux tests unitaires du projet source). À valider en direct : handshake réel HDCU-1500, encodage/échelle des valeurs paint, décodage tally, et l'implémentation MCS complète si le site l'exige."
+    },
+    {
+      "version": "0.27.0",
+      "date": "2026-08-05",
+      "notes": "Fondations « multi-types de caméras ». Le plugin est rebrandé « Caméras » (au lieu de « Caméras tourelles ») : il reste à pilotes, chaque type de matériel étant un driver qui déclare son modèle. Ajout d'une CATÉGORIE de driver (PTZ tourelle / CCU système / fiche générique) pour le regroupement d'affichage à venir, et d'une capacité TALLY. Préparation à l'arrivée d'un driver Sony CCU (protocole 700/CNS sur TCP:7700, paint + tally) — le parc et le RCP restent unifiés, toutes marques et tous types côte à côte."
+    },
+    {
       "version": "0.26.1",
       "date": "2026-08-05",
       "notes": "RCP, deux ajouts. EXPORT CSV : quand une référence est mémorisée, un bouton « Exporter CSV » télécharge un tableau mis en page comme le RCP (caméras en colonnes, réglages en lignes groupées, trios R·V·B sur une ligne), séparateur « ; » et BOM UTF-8 pour Excel FR. BASCULE D'AFFICHAGE : nouveau sélecteur « Écart » / « Référence » dans l'en-tête — « Écart » = valeur courante + décalage vs référence (comportement habituel) ; « Référence » = affiche les valeurs de référence mémorisées (la cible), en lecture seule. Choix mémorisé par poste."

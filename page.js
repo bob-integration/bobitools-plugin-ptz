@@ -56,7 +56,8 @@ window.BTTools.ptz = (function () {
         $("#ptz-rcp-setref").addEventListener("click", rcpSetReference);
         $("#ptz-rcp-clearref").addEventListener("click", rcpClearReference);
         $("#ptz-rcp-exportcsv").addEventListener("click", rcpExportCsv);
-        $("#ptz-rcp-style").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) rcpSetStyle(b.dataset.s); });
+        $("#ptz-rcp-diaph").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) rcpSetDiaphStyle(b.dataset.d); });
+        $("#ptz-rcp-ped").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) rcpSetPedStyle(b.dataset.p); });
         $("#ptz-rcp-view").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) rcpSetViewMode(b.dataset.v); });
         $("#ptz-rcp-cmp").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) rcpSetValueMode(b.dataset.m); });
         // Glisser des rotatifs : gestionnaires globaux (le contrôle est repeint sous eux).
@@ -988,10 +989,13 @@ window.BTTools.ptz = (function () {
     let rcpErr = {};                   // { camId: message }
     let rcpRef = null;                 // { camId: { key: value } } | null
     let rcpRefDate = null;             // date ISO de la mémorisation | null
-    let rcpStyle = "knob";             // ergonomie des contrôles int : knob | step
-    let rcpViewMode = "full";          // vue : full (tout) | compact (épinglés)
+    let rcpStyle = "knob";             // ergonomie des mini-contrôles int de l'ÉCRAN : knob | step
+    let rcpDiaphStyle = "fader";       // ergonomie du Diaph : fader | knob
+    let rcpPedStyle = "wheel";         // ergonomie du Pedestal : wheel | knob
+    let rcpCat = "fav";                // catégorie affichée dans l'ÉCRAN : "fav" ou un nom de groupe
+    let rcpViewMode = "full";          // vue : full (tout) | compact (diaph + pedestal seuls)
     let rcpValueMode = "delta";        // affichage : delta (valeur+écart, pilotable) | ref (valeur de référence, lecture)
-    let rcpPins = new Set();           // identifiants de lignes épinglées (★)
+    let rcpPins = new Set();           // FAVORIS : clés de paramètres épinglés (★), toutes caméras
     const rcpTimers = {};              // débounce d'écriture par "camId|key"
     let rcpDrag = null;                // rotatif en cours de glissement { camId, key, startY, startVal }
     let rcpDragActive = false;         // un glissement est en cours (gèle le re-rendu global)
@@ -1007,6 +1011,9 @@ window.BTTools.ptz = (function () {
     const RCP_LS_REF = "ptz_color_reference";
     const RCP_LS_PINS = "ptz_rcp_pins";
     const RCP_LS_STYLE = "ptz_rcp_style";
+    const RCP_LS_DIAPH = "ptz_rcp_diaph";
+    const RCP_LS_PED = "ptz_rcp_ped";
+    const RCP_LS_CAT = "ptz_rcp_cat";
     const RCP_LS_VIEW = "ptz_rcp_view";
     const RCP_LS_CMP = "ptz_rcp_valmode";
     let rcpStoreOk = null;             // null=inconnu · true=ctx.store · false=localStorage
@@ -1071,7 +1078,10 @@ window.BTTools.ptz = (function () {
     async function loadRcp() {
         rcpData = {}; rcpErr = {};
         // Préférences perso (ergonomie + vue) : poste local.
-        rcpStyle = (localStorage.getItem(RCP_LS_STYLE) === "step") ? "step" : "knob";
+        rcpStyle = "knob";                 // mini-contrôles de l'écran : rotatifs (plus de bascule ±)
+        rcpDiaphStyle = (localStorage.getItem(RCP_LS_DIAPH) === "knob") ? "knob" : "fader";
+        rcpPedStyle = (localStorage.getItem(RCP_LS_PED) === "knob") ? "knob" : "wheel";
+        rcpCat = localStorage.getItem(RCP_LS_CAT) || "fav";
         rcpViewMode = (localStorage.getItem(RCP_LS_VIEW) === "compact") ? "compact" : "full";
         rcpValueMode = (localStorage.getItem(RCP_LS_CMP) === "ref") ? "ref" : "delta";
         // Référence + épingles : partagées via ctx.store si dispo, sinon localStorage.
@@ -1104,6 +1114,28 @@ window.BTTools.ptz = (function () {
         renderRcp();
     }
 
+    // Ergonomie du Diaph (fader vertical / gros rotatif) et du Pedestal (molette / rotatif) :
+    // préférence PERSO du poste (localStorage), comme la vue.
+    function rcpSetDiaphStyle(s) {
+        if (s !== "fader" && s !== "knob") return;
+        rcpDiaphStyle = s;
+        try { localStorage.setItem(RCP_LS_DIAPH, s); } catch (e) { /* ignore */ }
+        renderRcp();
+    }
+    function rcpSetPedStyle(s) {
+        if (s !== "wheel" && s !== "knob") return;
+        rcpPedStyle = s;
+        try { localStorage.setItem(RCP_LS_PED, s); } catch (e) { /* ignore */ }
+        renderRcp();
+    }
+    // Catégorie de l'ÉCRAN LCD (onglet courant) : "fav" ou un nom de groupe.
+    function rcpSetCat(cat) {
+        if (!cat) return;
+        rcpCat = cat;
+        try { localStorage.setItem(RCP_LS_CAT, cat); } catch (e) { /* ignore */ }
+        renderRcp();
+    }
+
     function rcpSetViewMode(v) {
         if (v !== "full" && v !== "compact") return;
         rcpViewMode = v;
@@ -1121,16 +1153,20 @@ window.BTTools.ptz = (function () {
         renderRcp();
     }
 
-    function rcpTogglePin(rid) {
-        if (!rid) return;
-        if (rcpPins.has(rid)) rcpPins.delete(rid); else rcpPins.add(rid);
+    // Épingle/désépingle un réglage en FAVORI (par clé de paramètre). La liste est partagée
+    // (ctx.store) avec repli localStorage — mécanisme repris des anciennes « épingles ».
+    function rcpToggleFav(key) {
+        if (!key) return;
+        if (rcpPins.has(key)) rcpPins.delete(key); else rcpPins.add(key);
         rcpPinsPersist();
         renderRcp();
     }
 
     function syncRcpToggles() {
-        const st = $("#ptz-rcp-style");
-        if (st) st.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.s === rcpStyle));
+        const dp = $("#ptz-rcp-diaph");
+        if (dp) dp.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.d === rcpDiaphStyle));
+        const pd = $("#ptz-rcp-ped");
+        if (pd) pd.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.p === rcpPedStyle));
         const vw = $("#ptz-rcp-view");
         if (vw) vw.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === rcpViewMode));
         const cm = $("#ptz-rcp-cmp");
@@ -1289,6 +1325,61 @@ window.BTTools.ptz = (function () {
         return order;
     }
 
+    // ── Disposition « pupitre RCP-3500 » : une TRANCHE (colonne) par caméra ────────────
+    // Le PLACEMENT vient du champ `role` du descripteur (jamais de la marque) :
+    //   role "iris"   → Diaph (bas gauche, F-stop)   ·  role "mblack" → Pedestal (bas droite)
+    //   role "white"  → zone Blancs (par channel)    ·  role "black"  → zone Noirs (par channel)
+    //   SANS role     → ÉCRAN LCD, regroupé par `group` (les groupes deviennent les onglets).
+
+    // Noms COURTS des onglets de l'écran, dérivés des `group` réellement présents.
+    const RCP_SHORT = {
+        "Balance des blancs": "Bal. B", "Balance": "Bal.", "Exposition": "Expo", "Gamma": "Gamma",
+        "Knee": "Knee", "Détail": "Détail", "Detail": "Détail", "Matrice": "Matrice", "Matriçage": "Matrice",
+        "Look": "Look", "Saturation": "Sat.", "Chroma": "Chroma", "Obturateur": "Obtur.", "Gain": "Gain",
+        "Noir": "Noir", "Filtre ND": "ND", "Skin": "Skin",
+    };
+    function rcpShort(g) {
+        if (!g) return tr("plugin.ptz.rcp.other", "Autres");
+        if (RCP_SHORT[g]) return RCP_SHORT[g];
+        const w = String(g).split(/\s+/)[0];
+        return w.length > 9 ? w.slice(0, 8) + "." : w;
+    }
+
+    // Paramètres couleur d'UNE caméra pour un rôle donné, triés par canal (R·V·B).
+    function rcpRoleParams(c, role) {
+        const dd = rcpData[c.id];
+        if (!dd) return [];
+        return Object.keys(dd.byKey).map((k) => dd.byKey[k]).filter((p) => p.role === role)
+            .sort((a, b) => rcpChanOrder(a.channel) - rcpChanOrder(b.channel));
+    }
+    const rcpRoleOne = (c, role) => rcpRoleParams(c, role)[0] || null;
+    // Réglages de l'ÉCRAN (sans rôle) d'une caméra pour une catégorie (nom de groupe).
+    function rcpScreenParams(c, catg) {
+        const dd = rcpData[c.id];
+        if (!dd) return [];
+        return Object.keys(dd.byKey).map((k) => dd.byKey[k]).filter((p) => !p.role && (p.group || "") === catg);
+    }
+    const rcpFavParams = (c) => {
+        const dd = rcpData[c.id];
+        return dd ? Object.keys(dd.byKey).map((k) => dd.byKey[k]).filter((p) => rcpPins.has(p.key)) : [];
+    };
+
+    // Onglets de l'écran = union ordonnée des `group` des réglages SANS rôle (première apparition).
+    function rcpCategories(list) {
+        const order = [], seen = new Set();
+        list.forEach((c) => {
+            const dd = rcpData[c.id];
+            if (!dd) return;
+            Object.keys(dd.byKey).forEach((k) => {
+                const p = dd.byKey[k];
+                if (p.role) return;
+                const g = p.group || "";
+                if (!seen.has(g)) { seen.add(g); order.push(g); }
+            });
+        });
+        return order;
+    }
+
     function renderRcp() {
         const body = $("#ptz-rcp-body");
         if (!body) return;
@@ -1300,70 +1391,234 @@ window.BTTools.ptz = (function () {
                 "Aucune caméra de presta (numérotée) à afficher."))}</div>`;
             return;
         }
-        const groups = rcpBuildGroups(list);
-        if (!groups.some((g) => g.rows.length)) {
-            const settled = list.every((c) => rcpData[c.id] || rcpErr[c.id]);
-            body.innerHTML = `<div class="ptz-empty">${esc(settled
-                ? tr("plugin.ptz.rcp.noColor", "Aucun réglage colorimétrique exposé par ces caméras.")
-                : tr("plugin.ptz.reading", "Lecture…"))}</div>`;
+        // Tant qu'AUCUNE caméra n'a répondu (ni valeurs, ni erreur), on annonce la lecture.
+        // Dès qu'au moins une a un état, on dresse le rack : chaque tranche décrit alors le
+        // sien (valeurs / lecture… / injoignable), une caméra morte ne bloque pas les autres.
+        const anySettled = list.some((c) => rcpData[c.id] || rcpErr[c.id]);
+        if (!anySettled) {
+            body.innerHTML = `<div class="ptz-empty">${esc(tr("plugin.ptz.reading", "Lecture…"))}</div>`;
             return;
         }
+        const cats = rcpCategories(list);
+        if (rcpCat !== "fav" && cats.indexOf(rcpCat) < 0) rcpCat = cats.length ? cats[0] : "fav";
         const compact = rcpViewMode === "compact";
-        const shown = groups
-            .map((g) => ({ name: g.name, rows: g.rows.filter((r) => !compact || rcpPins.has(r.id)) }))
-            .filter((g) => g.rows.length);
-        if (compact && !shown.length) {
-            body.innerHTML = `<div class="ptz-empty">${esc(tr("plugin.ptz.rcp.noPins",
-                "Aucun réglage épinglé. Passez en vue Complète et cliquez ★."))}</div>`;
-            return;
-        }
-        const cols = `minmax(150px,190px) repeat(${list.length}, minmax(120px, 1fr))`;
-        const heads = `<div class="rcp-row rcp-heads">
-            <div class="rcp-rail"><span class="rcp-railk">${esc(tr("plugin.ptz.rcp.setting", "Réglage"))}</span></div>
-            ${list.map(rcpChanHead).join("")}
-          </div>`;
-        const rowsHtml = shown.map((g) => `
-            <div class="rcp-row"><div class="rcp-grouphead">${esc(g.name)}</div></div>
-            ${g.rows.map((row) => `<div class="rcp-row rcp-setrow">
-                <div class="rcp-rail">
-                  ${compact ? "" : `<button class="rcp-pin ${rcpPins.has(row.id) ? "on" : ""}" data-pin="${esc(row.id)}"
-                      title="${esc(tr("plugin.ptz.rcp.pin", "Épingler (vue Compacte)"))}">${rcpPins.has(row.id) ? "★" : "☆"}</button>`}
-                  <span class="rcp-rlabel">${esc(row.label)}</span>
-                </div>
-                ${list.map((c) => rcpCellHtml(row, c)).join("")}
-              </div>`).join("")}`).join("");
-        body.innerHTML = `<div class="rcp-console${rcpReadonly() ? " rcp-refmode" : ""}" style="--rcp-cols:${cols}"><div class="rcp-grid">${heads}${rowsHtml}</div></div>`;
+        const catsBar = compact ? "" : rcpCatsBar(cats);
+        const rack = `<div class="rcp-rack">${list.map((c) => rcpStrip(c, compact)).join("")}</div>`;
+        body.innerHTML = `<div class="rcp-console${rcpReadonly() ? " rcp-refmode" : ""}">${catsBar}${rack}</div>`;
         rcpBindWall(body);
+        rcpPositionOps(body);
         applyStatusDots();
     }
 
-    function rcpChanHead(c) {
+    // Barre d'onglets de l'écran (★ Favoris en tête), noms courts, flex-wrap (multi-lignes).
+    function rcpCatsBar(cats) {
+        const chip = (id, label, on) =>
+            `<button class="rcp-chip ${on ? "on" : ""}" data-cat="${esc(id)}" type="button">${esc(label)}</button>`;
+        return `<div class="rcp-cats"><span class="rcp-catlbl">${esc(tr("plugin.ptz.rcp.screen", "Écran"))}</span>`
+            + chip("fav", "★ " + tr("plugin.ptz.rcp.favShort", "Favoris"), rcpCat === "fav")
+            + cats.map((g) => chip(g, rcpShort(g), rcpCat === g)).join("")
+            + `</div>`;
+    }
+
+    // Une tranche caméra (colonne) : en-tête → écran → Blancs → Noirs → Diaph + Pedestal.
+    // En vue compacte : en-tête + Diaph + Pedestal seulement (pour piloter beaucoup de caméras).
+    function rcpStrip(c, compact) {
         const num = c.cam_number != null ? `N°${esc(c.cam_number)}` : "";
         const model = (c.identity && c.identity.model) || c.model || "";
         const err = rcpErr[c.id];
-        return `<div class="rcp-chan ${err ? "err" : ""}">
-            <span class="rcp-no"><span class="ptz-dot" data-dot-for="${esc(c.id)}"></span>${num ? " " + num : ""}</span>
-            <span class="rcp-nm">${esc(c.name)}</span>
-            <span class="rcp-md">${err ? esc(tr("plugin.ptz.unreachable", "injoignable")) : esc(model)}</span>
-          </div>`;
+        const head = `<div class="rcp-shead">
+            <div class="rcp-sh-id"><span class="ptz-dot" data-dot-for="${esc(c.id)}"></span>
+              <div class="rcp-sh-txt">
+                <span class="rcp-sh-nm">${num ? num + " " : ""}${esc(c.name)}</span>
+                <span class="rcp-sh-md">${err ? esc(tr("plugin.ptz.unreachable", "injoignable")) : esc(model)}</span>
+              </div></div>
+            <span class="rcp-tally" title="tally"></span></div>`;
+        let inner;
+        if (err) {
+            inner = `<div class="rcp-strip-err" title="${esc(err)}">${esc(tr("plugin.ptz.unreachable", "injoignable"))}</div>`
+                + `<div class="rcp-op-zone">${rcpDiaphHtml(c)}${rcpPedHtml(c)}</div>`;
+        } else if (!rcpData[c.id]) {
+            inner = `<div class="rcp-strip-load">${esc(tr("plugin.ptz.reading", "Lecture…"))}</div>`;
+        } else {
+            const top = compact ? "" :
+                rcpScreenHtml(c)
+                + rcpZoneHtml(c, "white", tr("plugin.ptz.rcp.whites", "Blancs"), "var(--rcp-amber)")
+                + rcpZoneHtml(c, "black", tr("plugin.ptz.rcp.blacks", "Noirs"), "var(--rcp-muted)");
+            inner = top + `<div class="rcp-op-zone">${rcpDiaphHtml(c)}${rcpPedHtml(c)}</div>`;
+        }
+        return `<div class="rcp-strip ${err ? "err" : ""}">${head}${inner}</div>`;
     }
 
-    // Cellule d'une caméra pour une ligne. Trio → les mini-contrôles de chaque canal présent,
-    // colorés R/V/B ; simple → le contrôle du type déclaré. Absent → « — », non lu → tiret sourd.
-    function rcpCellHtml(row, c) {
-        const dd = rcpData[c.id];
-        if (rcpErr[c.id]) return `<div class="rcp-cell rcp-na" title="${esc(rcpErr[c.id])}">—</div>`;
-        if (!dd) return `<div class="rcp-cell rcp-loading">…</div>`;
-        if (row.kind === "triplet") {
-            const members = Object.keys(dd.byKey).map((k) => dd.byKey[k])
-                .filter((p) => p.triplet === row.triplet && (p.group || "") === row.group);
-            if (!members.length) return `<div class="rcp-cell rcp-na">—</div>`;
-            members.sort((a, b) => rcpChanOrder(a.channel) - rcpChanOrder(b.channel));
-            return `<div class="rcp-cell"><div class="rcp-triplet">${members.map((p) => rcpNumControl(c, p, true)).join("")}</div></div>`;
+    // L'ÉCRAN LCD : onglet ★ Favoris (réglages épinglés) ou catégorie courante (par groupe).
+    function rcpScreenHtml(c) {
+        const isFav = rcpCat === "fav";
+        const params = isFav ? rcpFavParams(c) : rcpScreenParams(c, rcpCat);
+        const title = isFav ? "★ " + tr("plugin.ptz.rcp.favShort", "Favoris") : rcpShort(rcpCat);
+        let grid;
+        if (!params.length) {
+            grid = isFav
+                ? `<div class="rcp-fav-empty">${esc(tr("plugin.ptz.rcp.favEmpty",
+                    "Aucun favori. Cliquez l'étoile ★ d'un réglage pour l'ajouter."))}</div>`
+                : `<div class="rcp-fav-empty">${esc(tr("plugin.ptz.rcp.catEmpty", "—"))}</div>`;
+        } else {
+            grid = `<div class="rcp-kgrid">${params.map((p) => rcpMini(c, p, true)).join("")}</div>`;
         }
-        const p = dd.byKey[row.key];
-        if (!p) return `<div class="rcp-cell rcp-na">—</div>`;
-        return `<div class="rcp-cell">${rcpControl(c, p)}</div>`;
+        return `<div class="rcp-screen">
+            <div class="rcp-screen-lbl"><span>${esc(title)}</span><span class="rcp-screen-pg">${params.length || ""}</span></div>
+            ${grid}</div>`;
+    }
+
+    // Zone permanente Blancs / Noirs : les canaux R/(V/)B côte à côte, colorés.
+    function rcpZoneHtml(c, role, title, dot) {
+        const params = rcpRoleParams(c, role);
+        const inner = params.length
+            ? `<div class="rcp-zrow">${params.map((p) => rcpMini(c, p, false)).join("")}</div>`
+            : `<div class="rcp-zna">—</div>`;
+        return `<div class="rcp-zone rcp-zone-${role}">
+            <div class="rcp-ztl"><span class="rcp-zdot" style="background:${dot}"></span>${esc(title)}</div>
+            ${inner}</div>`;
+    }
+
+    // Un mini-contrôle (écran, blancs, noirs) : étoile Favori + contrôle + libellé optionnel.
+    function rcpMini(c, p, withLabel) {
+        const on = rcpPins.has(p.key);
+        const star = `<button class="rcp-star ${on ? "on" : ""}" data-fav="${esc(p.key)}" type="button"
+            title="${esc(tr("plugin.ptz.rcp.fav", "Favori (onglet ★)"))}">${on ? "★" : "☆"}</button>`;
+        const label = withLabel ? `<div class="rcp-mlabel">${esc(p.label)}</div>` : "";
+        return `<div class="rcp-mini">${star}${label}${rcpScreenControl(c, p)}</div>`;
+    }
+    // Contrôle d'un mini : int → petit rotatif/stepper coloré ; sinon type déclaré (enum/bool/text).
+    function rcpScreenControl(c, p) {
+        if (!p.writable) return rcpRoControl(c, p);
+        if (p.type === "int") return rcpNumControl(c, p, true);
+        return rcpControl(c, p);
+    }
+
+    // ── Diaph (rôle "iris") ────────────────────────────────────────────────────────────
+    // Valeur affichée en F-stop (approximatif, interpolé entre min/max du param). Le contrôle
+    // écrit la valeur BRUTE. Panasonic n'a pas d'iris → emplacement vide « — ».
+    function rcpDiaphHtml(c) {
+        const p = rcpRoleOne(c, "iris");
+        const lab = tr("plugin.ptz.rcp.diaph", "Diaph");
+        if (!p) return `<div class="rcp-op rcp-op-diaph rcp-op-empty"><div class="rcp-oplab">${esc(lab)}</div><div class="rcp-op-na">—</div></div>`;
+        return rcpOpHtml(c, p, "diaph", lab, rcpDiaphStyle, 86);
+    }
+    // ── Pedestal (rôle "mblack") ───────────────────────────────────────────────────────
+    function rcpPedHtml(c) {
+        const p = rcpRoleOne(c, "mblack");
+        const lab = tr("plugin.ptz.rcp.ped", "Pedestal");
+        if (!p) return `<div class="rcp-op rcp-op-ped rcp-op-empty"><div class="rcp-oplab">${esc(lab)}</div><div class="rcp-op-na">—</div></div>`;
+        return rcpOpHtml(c, p, "ped", lab, rcpPedStyle, 68);
+    }
+    // Fabrique commune d'un contrôle d'exploitation (Diaph/Pedestal). `style` : diaph =
+    // fader|knob, ped = wheel|knob. Écrit la valeur brute via le pipeline existant (data-ctl-*).
+    function rcpOpHtml(c, p, kind, lab, style, knobSize) {
+        const val = rcpCellVal(c.id, p.key);
+        const unread = val === null || val === undefined;
+        const off = rcpOpOffset(p, c.id, val, kind);
+        const numTxt = unread ? "—" : rcpOpNum(kind, p, val);
+        let ctrl;
+        if (unread) ctrl = `<div class="rcp-op-na">–</div>`;
+        else if (style === "knob") ctrl = `<div class="rcp-opknob">${rcpKnobSvg(val, p.min, p.max, "var(--rcp-amber)", knobSize)}</div>`;
+        else if (kind === "diaph") ctrl = `<div class="rcp-fader"><div class="rcp-fader-fill"></div><div class="rcp-fader-cap"></div></div>`;
+        else ctrl = `<div class="rcp-wheel"><div class="rcp-wheel-ridges"></div><div class="rcp-wheel-cur"></div></div>`;
+        return `<div class="rcp-op rcp-op-${kind}${off.ring ? " rcp-op-off" : ""}"
+            data-ctl-cam="${esc(c.id)}" data-ctl-key="${esc(p.key)}" data-ptype="int" data-opkind="${kind}" data-style="${style}">
+            <div class="rcp-oplab">${esc(lab)}</div>
+            ${ctrl}
+            <div class="rcp-opnum"><span class="rcp-opval">${esc(numTxt)}</span>${off.html}</div></div>`;
+    }
+    const rcpOpNum = (kind, p, val) => kind === "diaph" ? rcpFStop(val, p) : ((rcpNum(val) > 0 ? "+" : "") + val);
+
+    // Écart vs référence pour un contrôle d'exploitation : liseré (ring) + pastille. Diaph →
+    // la cible en F-stop ; Pedestal → l'écart signé (brut). Rien en mode « Référence ».
+    function rcpOpOffset(p, camId, val, kind) {
+        if (rcpValueMode === "ref") return { ring: false, html: "" };
+        const ref = rcpRefVal(camId, p.key);
+        if (ref === undefined) return { ring: false, html: "" };
+        const cur = rcpNum(val), r = rcpNum(ref);
+        if (isNaN(cur) || isNaN(r)) return { ring: false, html: "" };
+        const d = cur - r;
+        if (d === 0) return { ring: false, html: `<span class="rcp-opoff zero">=</span>` };
+        const cls = d > 0 ? "pos" : "neg";
+        const txt = kind === "diaph" ? "→ " + rcpFStop(ref, p) : (d > 0 ? "+" : "") + d;
+        const ttv = kind === "diaph" ? rcpFStop(ref, p) : r;
+        return { ring: true, html: `<span class="rcp-opoff ${cls}" title="${esc(tr("plugin.ptz.rcp.ref", "référence"))} : ${esc(ttv)}">${esc(txt)}</span>` };
+    }
+
+    // ── F-stop du diaph (APPROXIMATIF) ─────────────────────────────────────────────────
+    // Interpolation LINÉAIRE en espace APEX (Av = 2·log2(N)) entre l'extrémité fermée (min du
+    // param → F22) et l'extrémité ouverte (max → F4). Ce mapping reproduit à ~2 % près les
+    // ancres FR7 confirmées en direct (31743≈F4, 31487≈F5.6, 30975≈F11, 30464≈F22). La valeur
+    // écrite reste la valeur BRUTE ; on ne fait qu'AFFICHER le F-stop, puis on cale sur le cran
+    // standard le plus proche (comme le fait la caméra). À revoir si une caméra ouvre plus que F4.
+    const RCP_FSTOPS = [1.4, 1.9, 2, 2.8, 4, 5.6, 8, 11, 16, 22];
+    const RCP_AV_OPEN = 2 * Math.log2(4), RCP_AV_CLOSED = 2 * Math.log2(22);
+    function rcpFStop(val, p) {
+        const lo = p.min, hi = p.max;
+        if (lo == null || hi == null || hi <= lo) return String(val);
+        let t = (rcpNum(val) - lo) / (hi - lo);          // 0 = fermé (min), 1 = ouvert (max)
+        if (isNaN(t)) return "—";
+        t = Math.max(0, Math.min(1, t));
+        const av = RCP_AV_CLOSED + t * (RCP_AV_OPEN - RCP_AV_CLOSED);
+        const N = Math.pow(2, av / 2);
+        let best = RCP_FSTOPS[0], bd = Infinity;
+        RCP_FSTOPS.forEach((f) => { const dd = Math.abs(Math.log(f) - Math.log(N)); if (dd < bd) { bd = dd; best = f; } });
+        return "F" + best;
+    }
+
+    // ── Positionnement des faders/molettes (après rendu, et à chaque glissement) ────────
+    function rcpNorm(p, val) {
+        const lo = p.min == null ? 0 : p.min, hi = p.max == null ? 100 : p.max;
+        let t = hi > lo ? (rcpNum(val) - lo) / (hi - lo) : 0;
+        if (isNaN(t)) t = 0;
+        return Math.max(0, Math.min(1, t));
+    }
+    function rcpFaderPos(fader, t) {
+        const h = fader.clientHeight || 170;
+        const cap = fader.querySelector(".rcp-fader-cap"), fill = fader.querySelector(".rcp-fader-fill");
+        if (!cap || !fill) return;
+        const capH = 26, pad = 5, top = pad + (h - capH - 2 * pad) * (1 - t);
+        cap.style.top = top + "px"; fill.style.top = (top + capH / 2) + "px"; fill.style.bottom = pad + "px";
+    }
+    function rcpWheelPos(wheel, t) {
+        const h = wheel.clientHeight || 140, cur = wheel.querySelector(".rcp-wheel-cur");
+        if (!cur) return;
+        const pad = 6; cur.style.top = (pad + (h - 2 * pad) * (1 - t)) + "px";
+    }
+    function rcpPositionOps(body) {
+        body.querySelectorAll(".rcp-op").forEach((op) => {
+            const cam = op.dataset.ctlCam, key = op.dataset.ctlKey;
+            if (!cam) return;
+            const dd = rcpData[cam], p = dd && dd.byKey[key];
+            if (!p) return;
+            const val = rcpCellVal(cam, key);
+            if (val === null || val === undefined) return;
+            const t = rcpNorm(p, val);
+            const f = op.querySelector(".rcp-fader"); if (f) rcpFaderPos(f, t);
+            const w = op.querySelector(".rcp-wheel"); if (w) rcpWheelPos(w, t);
+        });
+    }
+    // Repeint un contrôle d'exploitation sans reconstruire (garde vivant le glissement).
+    function rcpPaintOp(wrap, p, val) {
+        const kind = wrap.dataset.opkind, t = rcpNorm(p, val);
+        const f = wrap.querySelector(".rcp-fader"); if (f) rcpFaderPos(f, t);
+        const w = wrap.querySelector(".rcp-wheel"); if (w) rcpWheelPos(w, t);
+        const sv = wrap.querySelector(".rcp-knob-svg");
+        if (sv) {
+            const ang = rcpKnobAng(val, p.min, p.max);
+            const arc = sv.querySelector(".rcp-arc"); if (arc) arc.setAttribute("d", rcpArc(RCP_KA0, ang, RCP_KR));
+            const ptr = sv.querySelector(".rcp-ptr");
+            if (ptr) {
+                const a = rcpPolar(ang, RCP_KR - 3), b = rcpPolar(ang, 13);
+                ptr.setAttribute("x1", b[0].toFixed(1)); ptr.setAttribute("y1", b[1].toFixed(1));
+                ptr.setAttribute("x2", a[0].toFixed(1)); ptr.setAttribute("y2", a[1].toFixed(1));
+            }
+        }
+        const off = rcpOpOffset(p, wrap.dataset.ctlCam, val, kind);
+        wrap.classList.toggle("rcp-op-off", off.ring);
+        const num = wrap.querySelector(".rcp-opnum");
+        if (num) num.innerHTML = `<span class="rcp-opval">${esc(rcpOpNum(kind, p, val))}</span>${off.html}`;
     }
 
     function rcpControl(c, p) {
@@ -1439,8 +1694,24 @@ window.BTTools.ptz = (function () {
 
     // ── Interactions du mur RCP ──────────────────────────────
     function rcpBindWall(body) {
-        body.querySelectorAll(".rcp-pin").forEach((el) =>
-            el.addEventListener("click", () => rcpTogglePin(el.dataset.pin)));
+        // Onglets de l'écran (catégories + ★ Favoris).
+        body.querySelectorAll(".rcp-chip").forEach((el) =>
+            el.addEventListener("click", () => rcpSetCat(el.dataset.cat)));
+        // Étoiles Favori (sur les minis blancs/noirs/écran).
+        body.querySelectorAll(".rcp-star").forEach((el) =>
+            el.addEventListener("click", (e) => { e.stopPropagation(); rcpToggleFav(el.dataset.fav); }));
+        // Diaph / Pedestal : fader, molette ou rotatif → même pipeline de glissement que les rotatifs.
+        body.querySelectorAll(".rcp-op").forEach((op) => {
+            const dd = rcpData[op.dataset.ctlCam], p = dd && dd.byKey[op.dataset.ctlKey];
+            if (!p || !p.writable) return;
+            const start = (e) => rcpKnobDown(e, op);
+            [".rcp-fader", ".rcp-wheel", ".rcp-knob-svg"].forEach((sel) => {
+                const t = op.querySelector(sel);
+                if (t) { t.addEventListener("mousedown", start); t.addEventListener("touchstart", start, { passive: false }); }
+            });
+            op.addEventListener("wheel", (e) => { e.preventDefault();
+                rcpStep(op.dataset.ctlCam, op.dataset.ctlKey, e.deltaY < 0 ? 1 : -1, e.altKey || e.shiftKey); }, { passive: false });
+        });
         body.querySelectorAll(".rcp-val[data-editable]").forEach((el) =>
             el.addEventListener("click", () => rcpEditValue(el)));
         body.querySelectorAll(".rcp-knob").forEach((wrap) => {
@@ -1492,6 +1763,7 @@ window.BTTools.ptz = (function () {
     // Repeint UNE valeur sans reconstruire le DOM : garde vivants le glissement et le focus.
     function rcpPaintValue(wrap, p, val) {
         if (!wrap) return;
+        if (wrap.classList.contains("rcp-op")) { rcpPaintOp(wrap, p, val); return; }   // Diaph/Pedestal
         const camId = wrap.dataset.ctlCam, key = wrap.dataset.ctlKey;
         const base = wrap.classList.contains("mini") ? 12 : 15;
         const vt = wrap.querySelector(".rcp-val");
@@ -1663,7 +1935,12 @@ window.BTTools.ptz = (function () {
             const key = w.dataset.ctlKey, p = dd && dd.byKey[key];
             if (!p) { mismatch = true; return; }
             const val = dd.values[key], ptype = w.dataset.ptype;
-            if (ptype === "int") {
+            if (w.classList.contains("rcp-op")) {                 // Diaph/Pedestal
+                const has = !(val === null || val === undefined);
+                const hadCtl = !!w.querySelector(".rcp-opval");
+                if (has !== hadCtl) { mismatch = true; return; }
+                if (has) rcpPaintOp(w, p, val);
+            } else if (ptype === "int") {
                 const hasCtl = !!w.querySelector(".rcp-val");
                 const has = !(val === null || val === undefined);
                 if (has !== hasCtl) { mismatch = true; return; }

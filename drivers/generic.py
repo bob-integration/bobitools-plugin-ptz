@@ -15,12 +15,13 @@ histoire que la pastille d'état soit utile. Rien d'autre n'est deviné.
 """
 import socket
 
-from .base import PtzDriver, register
+from .base import CAT_GENERIC, PtzDriver, register
 
 
 @register
 class GenericDriver(PtzDriver):
     KIND = "generic"
+    CATEGORY = CAT_GENERIC
     LABEL = "Générique (autre marque, non pilotée)"
     BRAND = "Générique"
     AVAILABLE = True

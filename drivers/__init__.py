@@ -16,4 +16,5 @@ from .base import (  # noqa: F401 — ré-export : c'est l'API du paquet
 from . import panasonic_aw  # noqa: F401 — l'import EST l'enregistrement
 from . import sony_cgi      # noqa: F401 — Sony CGI HTTP (FR7, SRG, BRC)
 from . import sony_visca    # noqa: F401
+from . import sony_ccu      # noqa: F401 — Sony CCU système (protocole 700/CNS, TCP 7700)
 from . import generic       # noqa: F401 — fiche non pilotée (autres marques)

@@ -1,8 +1,8 @@
 {
   "license": "GPL-3.0-or-later",
   "type": "ptz",
-  "label": "Caméras tourelles",
-  "version": "0.26.1",
+  "label": "Caméras",
+  "version": "0.31.0",
   "runtime": "docker",
   "ember": true,
   "store_api": true,
@@ -23,7 +23,7 @@
     "page_css": "page.css"
   },
   "docker": {
-    "image": "bobitool-ptz:0.26.1",
+    "image": "bobitool-ptz:0.31.0",
     "build": true,
     "port": 8080,
     "volume": "/data",

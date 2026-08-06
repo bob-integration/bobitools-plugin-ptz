@@ -36,6 +36,13 @@ CAP_PARAMS = "params"                # lecture / écriture de paramètres
 CAP_SNAPSHOT = "snapshot"            # vignette JPEG
 CAP_CONSOLE = "console"              # envoi de commande brute (mise au point)
 CAP_NETWORK = "network"             # lecture / changement de l'adresse IP
+CAP_TALLY = "tally"                  # état / lecture tally (rouge/vert), ex. CCU système Sony
+
+# Catégories de matériel dans le parc (regroupement d'affichage). Le contrat est le même pour
+# toutes ; c'est une caméra tourelle PTZ, une caméra système sur CCU, ou une simple fiche.
+CAT_PTZ = "ptz"          # tourelle PTZ (Panasonic AW, Sony FR7…)
+CAT_CCU = "ccu"          # caméra système pilotée par sa CCU (Sony 700/CNS…)
+CAT_GENERIC = "generic"  # fiche non pilotée
 
 
 class DriverError(Exception):
@@ -54,7 +61,7 @@ class Unsupported(DriverError):
 def param(key, label, type_, group="Général", options=None, min=None, max=None,
           step=None, unit="", writable=True, bulk=False, validated=True, help="",
           order=50, heavy=False, output=None, color=False,
-          big=None, triplet=None, channel=None):
+          big=None, triplet=None, channel=None, role=None):
     """Descripteur d'un paramètre pilotable, tel que consommé par le front.
 
     `bulk`     : le paramètre a du sens en RAPPEL GROUPÉ (appliquer la même valeur à
@@ -87,13 +94,18 @@ def param(key, label, type_, group="Général", options=None, min=None, max=None
                  partageant un même `triplet` sont rendus côte à côte, colorés par `channel`.
     `channel`  : composante colorée du triplet — `"R"`, `"G"`/`"V"` ou `"B"`. Fixe la couleur
                  et l'ordre du mini-contrôle dans la ligne du triplet.
+    `role`     : RÔLE dans la disposition « pupitre » (RCP) : `"iris"` (diaph), `"mblack"`
+                 (pedestal / master black), `"white"` (gain R/B des blancs, avec `channel`),
+                 `"black"` (R/B des noirs, avec `channel`). Les réglages SANS rôle vont dans
+                 l'« écran » du RCP (regroupés par `group`). Le front place chaque rôle à sa
+                 place, sans rien savoir de la marque.
     """
     return {
         "key": key, "label": label, "type": type_, "group": group,
         "options": options or [], "min": min, "max": max, "step": step, "unit": unit,
         "writable": writable, "bulk": bulk, "validated": validated, "help": help,
         "order": order, "heavy": heavy, "output": output, "color": color,
-        "big": big, "triplet": triplet, "channel": channel,
+        "big": big, "triplet": triplet, "channel": channel, "role": role,
     }
 
 
@@ -137,6 +149,7 @@ def catalog():
             "kind": kind,
             "label": cls.LABEL,
             "brand": cls.BRAND,
+            "category": cls.CATEGORY,
             "available": cls.AVAILABLE,
             "default_port": cls.DEFAULT_PORT,
             "needs_auth": cls.NEEDS_AUTH,
@@ -156,6 +169,7 @@ class PtzDriver:
     KIND = ""                  # identifiant technique, ex. "panasonic_aw"
     LABEL = ""                 # libellé UI, ex. "Panasonic (protocole AW)"
     BRAND = ""                 # marque, ex. "Panasonic"
+    CATEGORY = CAT_PTZ         # famille de matériel (CAT_PTZ / CAT_CCU / CAT_GENERIC) — regroupement
     AVAILABLE = True           # False = pilote déclaré mais pas encore implémenté
     DEFAULT_PORT = 80
     NEEDS_AUTH = True

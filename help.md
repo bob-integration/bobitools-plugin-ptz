@@ -573,3 +573,12 @@ l'échelle sans retoucher le code :
 
 Augmenter un chiffre agrandit la grille au prochain chargement. Les boutons **non exposés**
 d'un pupitre (au-delà de `grid_buttons`) ne sont jamais touchés par la grille.
+
+## Crédits — rétro-ingénierie du protocole CCU Sony
+
+Le pilote **CCU Sony** (paint via le protocole 700/CNS, TCP 7700) s'appuie sur la
+rétro-ingénierie publiée par **Oleksandr Nazaruk — Freehand** (freehand.com.ua,
+mail@freehand.com.ua), dépôt public **`freehand-dev/SONY.PTP700.SPP`** (bibliothèque C# :
+transport, trames, handshake, adresses de commande). Le pilote de Bobi.Tools est un portage
+Python de ce travail, complété par une capture directe d'un vrai pupitre RCP dialoguant avec la
+CCU. Merci à l'auteur pour ces sources ouvertes, sans lesquelles ce pilote n'existerait pas.

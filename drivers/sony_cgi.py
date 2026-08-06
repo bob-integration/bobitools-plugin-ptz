@@ -525,7 +525,7 @@ class SonyCgi(PtzDriver):
                   help="imaging.cgi?ExposureGain. Bornes UI approximatives."),
             # --- Iris : valeur BRUTE ExposureIris (ExposureFNumber est en lecture seule).
             #     Vérifié en direct : 31743≈F4.0 (ouvert) … 30464≈F22 (fermé), 31487≈F5.6.
-            param("iris", "Iris (diaphragme)", "int", group="Exposition", color=True,
+            param("iris", "Iris (diaphragme)", "int", group="Exposition", color=True, role="iris",
                   min=30464, max=31743, step=1, big=100, writable=True, bulk=True, validated=True,
                   order=32,
                   help="imaging.cgi?ExposureIris (valeur brute ; exige l'iris manuel, "
@@ -573,22 +573,22 @@ class SonyCgi(PtzDriver):
                   help="imaging.cgi?WhiteBalanceTint."),
             # Gains Cr/Cb regroupés sur une ligne (triplet « wbgain ») : Cr = rouge, Cb = bleu.
             param("wb_cr_gain", "Gain Cr (rouge)", "int", group="Balance des blancs", color=True,
-                  min=-99, max=99, step=1, big=10, triplet="wbgain", channel="R",
+                  min=-99, max=99, step=1, big=10, triplet="wbgain", channel="R", role="white",
                   writable=True, bulk=True, validated=True, order=43,
                   help="imaging.cgi?WhiteBalanceCrGain."),
             param("wb_cb_gain", "Gain Cb (bleu)", "int", group="Balance des blancs", color=True,
-                  min=-99, max=99, step=1, big=10, triplet="wbgain", channel="B",
+                  min=-99, max=99, step=1, big=10, triplet="wbgain", channel="B", role="white",
                   writable=True, bulk=True, validated=True, order=44,
                   help="imaging.cgi?WhiteBalanceCbGain."),
-            param("black_master", "Noir maître", "int", group="Noir", color=True,
+            param("black_master", "Noir maître", "int", group="Noir", color=True, role="mblack",
                   min=-99, max=99, step=1, big=10, writable=True, bulk=True, validated=True, order=50,
                   help="paint.cgi?MasterBlack."),
             # Noir R/B regroupés sur une ligne (triplet « black »).
             param("black_r", "Noir rouge", "int", group="Noir", color=True,
-                  min=-99, max=99, step=1, big=10, triplet="black", channel="R",
+                  min=-99, max=99, step=1, big=10, triplet="black", channel="R", role="black",
                   writable=True, bulk=True, validated=True, order=51, help="paint.cgi?RBlack."),
             param("black_b", "Noir bleu", "int", group="Noir", color=True,
-                  min=-99, max=99, step=1, big=10, triplet="black", channel="B",
+                  min=-99, max=99, step=1, big=10, triplet="black", channel="B", role="black",
                   writable=True, bulk=True, validated=True, order=52, help="paint.cgi?BBlack."),
             param("base_look", "Base Look", "enum", group="Look", color=True,
                   options=baselook_opts, writable=bool(baselook_opts), bulk=bool(baselook_opts),

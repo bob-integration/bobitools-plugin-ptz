@@ -310,5 +310,19 @@
   "plugin.ptz.rcp.viewFull": "Full",
   "plugin.ptz.rcp.viewCompact": "Compact",
   "plugin.ptz.rcp.pin": "Pin (Compact view)",
-  "plugin.ptz.rcp.noPins": "No setting pinned. Switch to Full view and click ★."
+  "plugin.ptz.rcp.noPins": "No setting pinned. Switch to Full view and click ★.",
+  "plugin.ptz.rcp.diaph": "Iris",
+  "plugin.ptz.rcp.diaphFader": "Fader",
+  "plugin.ptz.rcp.diaphKnob": "Knob",
+  "plugin.ptz.rcp.ped": "Pedestal",
+  "plugin.ptz.rcp.pedWheel": "Wheel",
+  "plugin.ptz.rcp.pedKnob": "Knob",
+  "plugin.ptz.rcp.screen": "Screen",
+  "plugin.ptz.rcp.favShort": "Favourites",
+  "plugin.ptz.rcp.fav": "Favourite (★ tab)",
+  "plugin.ptz.rcp.favEmpty": "No favourite yet. Click the ★ on a setting to add it.",
+  "plugin.ptz.rcp.catEmpty": "—",
+  "plugin.ptz.rcp.whites": "Whites",
+  "plugin.ptz.rcp.blacks": "Blacks",
+  "plugin.ptz.rcp.other": "Other"
 }
