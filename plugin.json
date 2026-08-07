@@ -2,7 +2,7 @@
   "license": "GPL-3.0-or-later",
   "type": "ptz",
   "label": "Caméras",
-  "version": "0.31.3",
+  "version": "0.31.4",
   "runtime": "docker",
   "ember": true,
   "store_api": true,
@@ -23,7 +23,7 @@
     "page_css": "page.css"
   },
   "docker": {
-    "image": "bobitool-ptz:0.31.3",
+    "image": "bobitool-ptz:0.31.4",
     "build": true,
     "port": 8080,
     "volume": "/data",

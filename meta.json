@@ -1,6 +1,11 @@
 {
   "changelog": [
     {
+      "version": "0.31.4",
+      "date": "2026-08-07",
+      "notes": "CCU Sony : l'iris est affiché en % D'OUVERTURE (0-100) au lieu d'un F-stop. Ce protocole n'expose que la COMMANDE d'iris (le drive), pas le F-number remonté par l'objectif (que le RCP, lui, affiche) — et le drive sature à l'ouverture. Un F-stop fidèle est donc impossible et serait de toute façon propre à chaque optique. Le % d'ouverture est honnête et valable pour toutes les optiques ; le contrôle du diaphragme est inchangé. L'UI n'affiche plus de F-stop quand le param déclare une unité %."
+    },
+    {
       "version": "0.31.3",
       "date": "2026-08-07",
       "notes": "CCU Sony : l'écriture paint est passée en « tire et oublie » (n'attend plus la réponse de la CCU), comme un vrai RCP qui streame ses variations. Corrige les SACCADES en glissant le diaphragme et le pedestal (chaque micro-mouvement ne bloque plus sur un aller-retour réseau)."

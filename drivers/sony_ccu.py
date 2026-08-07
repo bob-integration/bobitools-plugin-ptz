@@ -445,6 +445,17 @@ def _scaled(key, spec):
     return spec.get("kind") == "analog" and key != "iris"
 
 
+# L'iris : on n'a que la COMMANDE (drive) 0..32767, pas le F-number objectif (non exposé par le
+# protocole, et le drive SATURE à l'ouverture). On l'affiche donc en % d'ouverture (position du
+# drive) — honnête et valable pour TOUTE optique, plutôt qu'un F-stop faux. 0 % = fermé, 100 % = max.
+def iris_to_pct(raw):
+    return int(round(max(0, min(PAINT_FULL, raw)) * 100 / PAINT_FULL))
+
+
+def pct_to_iris(pct):
+    return max(0, min(PAINT_FULL, int(round(pct * PAINT_FULL / 100))))
+
+
 # --------------------------------------------------------------------------- moteur de connexion
 
 class CnsEngine:
@@ -872,8 +883,8 @@ class SonyCcu(PtzDriver):
                          min=AMIN, max=AMAX, step=ASTEP, big=ABIG, order=order, **kw)
         p = []
         # Diaphragme (fader du RCP)
-        p.append(param("iris", "Iris (diaphragme)", "int", group="Exposition", color=True,
-                       min=0, max=0x7FFF, step=64, big=512, validated=True, order=10, role="iris"))
+        p.append(param("iris", "Iris (ouverture)", "int", group="Exposition", color=True,
+                       min=0, max=100, step=1, big=5, unit="%", validated=True, order=10, role="iris"))
         # Noir maître (molette pedestal) + triplet noir R/V/B
         p.append(a("black_master", "Noir maître", "Noir", 20, role="mblack"))
         p.append(a("black_r", "Noir rouge", "Noir", 21, role="black", triplet="black", channel="R"))
@@ -934,7 +945,12 @@ class SonyCcu(PtzDriver):
             fam, p0 = spec["req"]                 # groupe « famille » (REL) + param0
             if (fam, p0) in self._state:
                 raw = self._state[(fam, p0)]
-                out[key] = raw_to_disp(raw) if _scaled(key, spec) else raw
+                if key == "iris":
+                    out[key] = iris_to_pct(raw)            # 0..100 % d'ouverture
+                elif _scaled(key, spec):
+                    out[key] = raw_to_disp(raw)            # ±99 pupitre
+                else:
+                    out[key] = raw
         return out
 
     def write_param(self, key, value):
@@ -950,6 +966,10 @@ class SonyCcu(PtzDriver):
         if spec["kind"] == "switch":
             cmd = bytes([g, p0, 0x01 if value else 0x00])
             raw = 1 if value else 0
+        elif key == "iris":
+            raw = pct_to_iris(int(value))         # % d'ouverture → drive 0..32767
+            v = raw & 0xFFFF
+            cmd = bytes([g, p0, (v >> 8) & 0xFF, v & 0xFF])
         else:
             # l'UI envoie l'échelle pupitre (±99) pour les réglages signés → reconvertir en 16 bits
             raw = disp_to_raw(int(value)) if _scaled(key, spec) else (int(value) & 0xFFFF)

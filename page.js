@@ -1555,6 +1555,10 @@ window.BTTools.ptz = (function () {
     const RCP_FSTOPS = [1.4, 1.9, 2, 2.8, 4, 5.6, 8, 11, 16, 22];
     const RCP_AV_OPEN = 2 * Math.log2(4), RCP_AV_CLOSED = 2 * Math.log2(22);
     function rcpFStop(val, p) {
+        // Certaines caméras (ex. CCU Sony) n'exposent que la COMMANDE d'iris, pas le F-number
+        // objectif : le param déclare alors une unité "%" et on affiche l'ouverture en %, pas un
+        // F-stop faux. La position du fader (rcpNorm) reste basée sur min/max, inchangée.
+        if (p && p.unit === "%") return rcpNum(val) + "%";
         const lo = p.min, hi = p.max;
         if (lo == null || hi == null || hi <= lo) return String(val);
         let t = (rcpNum(val) - lo) / (hi - lo);          // 0 = fermé (min), 1 = ouvert (max)
