@@ -957,7 +957,9 @@ class SonyCcu(PtzDriver):
             cmd = bytes([g, p0, (v >> 8) & 0xFF, v & 0xFF])   # valeur 16 bits big-endian
         rid = eng.next_request_id()
         pkt = build_message50(rid, self._msg_ccu_no(), cmd, sub_type=M50_SUB_REQUEST)
-        eng.request(rid, pkt, timeout=self.timeout)
+        # « TIRE ET OUBLIE » : on N'ATTEND PAS la réponse (comme un vrai RCP qui streame ses
+        # variations). Attendre bloquerait chaque écriture → saccades en glissant diaph/pedestal.
+        eng._raw_send(pkt)
         # refléter localement (valeur RAW comme le cache _notify) pour un retour immédiat
         self._state[(g & 0xFE, p0)] = raw
         return True

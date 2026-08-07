@@ -1,6 +1,11 @@
 {
   "changelog": [
     {
+      "version": "0.31.3",
+      "date": "2026-08-07",
+      "notes": "CCU Sony : l'écriture paint est passée en « tire et oublie » (n'attend plus la réponse de la CCU), comme un vrai RCP qui streame ses variations. Corrige les SACCADES en glissant le diaphragme et le pedestal (chaque micro-mouvement ne bloque plus sur un aller-retour réseau)."
+    },
+    {
       "version": "0.31.2",
       "date": "2026-08-07",
       "notes": "CCU Sony : correction de l'affichage des réglages paint près de zéro. La conversion vers l'échelle pupitre ±99 se fait maintenant par TRONCATURE vers zéro (comme un vrai RCP Sony : il faut un pas complet pour quitter 0) au lieu d'un arrondi au plus proche, qui affichait ±1 près de zéro là où le pupitre montre encore 0. Aller-retour ±99 ↔ 16 bits stable."
