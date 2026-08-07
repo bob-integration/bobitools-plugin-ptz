@@ -425,11 +425,19 @@ PAINT_DISP = 99
 
 
 def raw_to_disp(raw):
-    return int(round(raw * PAINT_DISP / PAINT_FULL))
+    # TRONCATURE vers zéro (comme le pupitre Sony) : il faut un pas complet pour quitter 0, sinon
+    # on afficherait ±1 près de zéro là où le RCP montre encore 0 (arrondi au plus proche = faux).
+    return int(raw * PAINT_DISP / PAINT_FULL)
 
 
 def disp_to_raw(disp):
-    return max(-PAINT_FULL, min(PAINT_FULL, int(round(disp * PAINT_FULL / PAINT_DISP))))
+    # on vise le HAUT du palier d'affichage (+ ~0.5 pas) pour que l'écriture se relise à l'identique
+    # malgré la troncature en lecture (aller-retour ±99 ↔ 16 bits stable).
+    if disp == 0:
+        return 0
+    step = PAINT_FULL / PAINT_DISP
+    raw = int(round(disp * step + (0.5 * step if disp > 0 else -0.5 * step)))
+    return max(-PAINT_FULL, min(PAINT_FULL, raw))
 
 
 def _scaled(key, spec):
