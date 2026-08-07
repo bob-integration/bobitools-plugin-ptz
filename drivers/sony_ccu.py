@@ -417,6 +417,25 @@ RITUAL_G20 = [0x00, 0x01, 0x03, 0x04, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0c, 0x0d, 
               0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x1a, 0x1d, 0x20, 0x26, 0x27, 0x28, 0x29,
               0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x30, 0x31, 0x32, 0x33, 0x35]
 
+# Échelle d'AFFICHAGE des réglages paint signés : le pupitre Sony montre ±99, la valeur interne
+# est sur 16 bits signés (±32767). CONFIRMÉ EN DIRECT : interne −4368 ↔ pupitre −13.
+# L'iris est EXCLU (échelle absolue propre, rendu en F-stop). display = round(raw·99/32767).
+PAINT_FULL = 32767
+PAINT_DISP = 99
+
+
+def raw_to_disp(raw):
+    return int(round(raw * PAINT_DISP / PAINT_FULL))
+
+
+def disp_to_raw(disp):
+    return max(-PAINT_FULL, min(PAINT_FULL, int(round(disp * PAINT_FULL / PAINT_DISP))))
+
+
+def _scaled(key, spec):
+    """Un réglage est affiché en ±99 s'il est analogique ET n'est pas l'iris (échelle propre)."""
+    return spec.get("kind") == "analog" and key != "iris"
+
 
 # --------------------------------------------------------------------------- moteur de connexion
 
@@ -839,7 +858,7 @@ class SonyCcu(PtzDriver):
         """Réglages colorimétriques (paint), adresses CONFIRMÉES par capture. Analogiques =
         16 bits signés. `role` positionne chaque réglage sur le pupitre RCP-3500 (diaph, noirs,
         blancs) ; `triplet`/`channel` regroupe les R/V/B côte à côte."""
-        AMIN, AMAX, ASTEP, ABIG = -32768, 32767, 8, 256   # plage analogique 16 bits signés
+        AMIN, AMAX, ASTEP, ABIG = -99, 99, 1, 10          # échelle pupitre Sony ±99 (cf. raw_to_disp)
         def a(key, label, grp, order, **kw):
             return param(key, label, "int", group=grp, color=True, validated=True,
                          min=AMIN, max=AMAX, step=ASTEP, big=ABIG, order=order, **kw)
@@ -906,7 +925,8 @@ class SonyCcu(PtzDriver):
                 continue
             fam, p0 = spec["req"]                 # groupe « famille » (REL) + param0
             if (fam, p0) in self._state:
-                out[key] = self._state[(fam, p0)]
+                raw = self._state[(fam, p0)]
+                out[key] = raw_to_disp(raw) if _scaled(key, spec) else raw
         return out
 
     def write_param(self, key, value):
@@ -921,14 +941,17 @@ class SonyCcu(PtzDriver):
         g, p0 = spec["res"]                       # groupe ABS (set absolu)
         if spec["kind"] == "switch":
             cmd = bytes([g, p0, 0x01 if value else 0x00])
+            raw = 1 if value else 0
         else:
-            v = int(value) & 0xFFFF
+            # l'UI envoie l'échelle pupitre (±99) pour les réglages signés → reconvertir en 16 bits
+            raw = disp_to_raw(int(value)) if _scaled(key, spec) else (int(value) & 0xFFFF)
+            v = raw & 0xFFFF
             cmd = bytes([g, p0, (v >> 8) & 0xFF, v & 0xFF])   # valeur 16 bits big-endian
         rid = eng.next_request_id()
         pkt = build_message50(rid, self._msg_ccu_no(), cmd, sub_type=M50_SUB_REQUEST)
         eng.request(rid, pkt, timeout=self.timeout)
-        # refléter localement pour un retour immédiat (la CCU confirmera par un push)
-        self._state[(g & 0xFE, p0)] = int(value) & 0xFFFF if spec["kind"] != "switch" else (1 if value else 0)
+        # refléter localement (valeur RAW comme le cache _notify) pour un retour immédiat
+        self._state[(g & 0xFE, p0)] = raw
         return True
 
     # -- tally -------------------------------------------------------------
