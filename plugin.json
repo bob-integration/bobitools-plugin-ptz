@@ -73,5 +73,304 @@
       "default": "10",
       "label": "Grille : nombre de boutons exposés par pupitre (colonnes par bloc)"
     }
-  ]
+  ],
+  "permissions": [
+    {
+      "id": "camera.preset",
+      "label": "Rappeler une mémoire",
+      "default_roles": [
+        "operator"
+      ]
+    },
+    {
+      "id": "camera.preset_edit",
+      "label": "Enregistrer / renommer des mémoires",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Enregistrement et nommage des mémoires, shotboxes."
+    },
+    {
+      "id": "camera.params",
+      "label": "Régler une caméra",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Paramètres image et format, marche/arrêt, instantanés et restaurations."
+    },
+    {
+      "id": "camera.admin",
+      "label": "Administrer une caméra",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Changement d'adresse IP, console de commandes brutes."
+    },
+    {
+      "id": "panel.config",
+      "label": "Configurer les pupitres",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Affectation des boutons, numérotation des caméras (grille), macros, application d'une presta."
+    },
+    {
+      "id": "camera.manage",
+      "label": "Gérer le parc",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Ajouter, modifier, supprimer ou importer des caméras et des pupitres ; profils de presta ; recherche par numéro de série."
+    }
+  ],
+  "acl": {
+    "resources": [
+      {
+        "key": "camera",
+        "label": "Caméras",
+        "choices": "cameras",
+        "choices_list": "cameras"
+      },
+      {
+        "key": "panel",
+        "label": "Pupitres",
+        "choices": "panels",
+        "choices_list": "panels"
+      }
+    ],
+    "routes": [
+      {
+        "method": "POST",
+        "path": "poll",
+        "perm": null
+      },
+      {
+        "method": "POST",
+        "path": "panels/poll",
+        "perm": null
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/identify",
+        "perm": null
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/probe",
+        "perm": null
+      },
+      {
+        "method": "POST",
+        "path": "panels/{panel}/identify",
+        "perm": null
+      },
+      {
+        "method": "POST",
+        "path": "bulk/identify",
+        "perm": null
+      },
+      {
+        "method": "POST",
+        "path": "cameras/batch",
+        "perm": "camera.manage"
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/presets/recall",
+        "perm": "camera.preset",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/presets/store",
+        "perm": "camera.preset_edit",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/presets/name",
+        "perm": "camera.preset_edit",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/params",
+        "perm": "camera.params",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/power",
+        "perm": "camera.params",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/network",
+        "perm": "camera.admin",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "cameras/{camera}/console",
+        "perm": "camera.admin",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "bulk/preset",
+        "perm_by": {
+          "field": "body.mode",
+          "map": {
+            "store": "camera.preset_edit"
+          },
+          "default": "camera.preset"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "bulk/name",
+        "perm": "camera.preset_edit"
+      },
+      {
+        "method": "POST",
+        "path": "bulk/params",
+        "perm": "camera.params"
+      },
+      {
+        "method": "POST",
+        "path": "snapshots",
+        "perm": "camera.params"
+      },
+      {
+        "method": "POST",
+        "path": "snapshots/{snapshot}/restore",
+        "perm": "camera.params"
+      },
+      {
+        "method": "DELETE",
+        "path": "snapshots/{snapshot}",
+        "perm": "camera.params"
+      },
+      {
+        "method": "POST",
+        "path": "shotboxes",
+        "perm": "camera.preset_edit"
+      },
+      {
+        "method": "POST",
+        "path": "shotboxes/delete",
+        "perm": "camera.preset_edit"
+      },
+      {
+        "method": "POST",
+        "path": "ember/set",
+        "perm_by": {
+          "field": "body.ref.field",
+          "map": {
+            "preset": "camera.preset",
+            "power": "camera.params",
+            "format": "camera.params"
+          },
+          "default": "camera.params"
+        },
+        "resource": {
+          "camera": "body.ref.cam"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "ember/connect",
+        "perm": "panel.config"
+      },
+      {
+        "method": "POST",
+        "path": "panels/{panel}/assignments",
+        "perm": "panel.config",
+        "resource": {
+          "panel": "{panel}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "panels/{panel}/macros/{n}",
+        "perm": "panel.config",
+        "resource": {
+          "panel": "{panel}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "panels/{panel}/macros/{n}/control",
+        "perm": "panel.config",
+        "resource": {
+          "panel": "{panel}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "prestas/apply",
+        "perm": "panel.config"
+      },
+      {
+        "method": "PUT",
+        "path": "cameras/{camera}",
+        "perm": "camera.manage",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "DELETE",
+        "path": "cameras/{camera}",
+        "perm": "camera.manage",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "panels/{panel}",
+        "perm": "camera.manage",
+        "resource": {
+          "panel": "{panel}"
+        }
+      },
+      {
+        "method": "DELETE",
+        "path": "panels/{panel}",
+        "perm": "camera.manage",
+        "resource": {
+          "panel": "{panel}"
+        }
+      },
+      {
+        "method": "*",
+        "path": "cameras/{camera}/**",
+        "perm": "camera.params",
+        "resource": {
+          "camera": "{camera}"
+        }
+      },
+      {
+        "method": "*",
+        "path": "**",
+        "perm": "camera.manage"
+      }
+    ]
+  }
 }
