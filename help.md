@@ -456,7 +456,7 @@ Les autres modèles de la gamme (RP150/120/60/50) partagent a priori le même pr
 pupitre (`get_user_btn`/`set_user_btn`, affectation de fonctions aux boutons) sont repérées
 mais pas exposées — accessoire par rapport aux affectations et aux macros.
 
-## Contribution Ember+ (pupitre VSM)
+## Contribution Ember+ (contrôleur broadcast, VSM par exemple)
 
 L'outil s'annonce dans le **service Ember+ global** (`"ember": true`). Il expose deux volets.
 
